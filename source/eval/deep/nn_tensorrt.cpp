@@ -71,6 +71,59 @@ using namespace Tools;
 
 namespace Eval::dlshogi
 {
+
+#if defined(TRT_NN_FP16)
+// (short)0x3c00 は (half)1.0 相当のバイナリ互換値
+const char* unpack_kernel_code = R"(
+extern "C"{
+__global__ void unpack1(char *p1, short *x1, int max_tid) {
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if(tid >= max_tid) return;
+	int ib = tid * 81;
+	int ie = ib + 81;
+	for (int i = ib; i < ie; ++i) {
+		x1[i] = (-(short)((p1[i >> 3] >> (i & 7)) & 1)) & 0x3c00;
+	}
+}
+__global__ void unpack2(char *p2, short *x2, int max_tid) {
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if(tid >= max_tid) return;
+	short v = (-(short)((p2[tid >> 3] >> (tid & 7)) & 1)) & 0x3c00;
+	int ib = tid * 81;
+	int ie = ib + 81;
+	for (int i = ib; i < ie; ++i) {
+		x2[i] = v;
+	}
+}
+}
+)";
+#else
+// (int)0x3f800000 は (float)1.0 相当のバイナリ互換値
+const char* unpack_kernel_code = R"(
+extern "C"{
+__global__ void unpack1(char *p1, int *x1, int max_tid) {
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if(tid >= max_tid) return;
+	int ib = tid * 81;
+	int ie = ib + 81;
+	for (int i = ib; i < ie; ++i) {
+		x1[i] = (-(int)((p1[i >> 3] >> (i & 7)) & 1)) & 0x3f800000;
+	}
+}
+__global__ void unpack2(char *p2, int *x2, int max_tid) {
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	if(tid >= max_tid) return;
+	int v = (-(int)((p2[tid >> 3] >> (tid & 7)) & 1)) & 0x3f800000;
+	int ib = tid * 81;
+	int ie = ib + 81;
+	for (int i = ib; i < ie; ++i) {
+		x2[i] = v;
+	}
+}
+}
+)";
+#endif
+
 	// モデルファイルの読み込み。
 	Tools::Result NNTensorRT::load(const std::string& model_path, int gpu_id, int max_batch_size)
 	{
@@ -81,12 +134,38 @@ namespace Eval::dlshogi
 		// host(GPU側)に同じだけメモリを確保しておいて、CPU側からそこに転送する。
 		set_device(gpu_id);
 
+		checkCudaErrors(cudaMalloc((void**)&p1_dev, sizeof(PType)            * ((max_batch_size * ((int)COLOR_NB * (int)MAX_FEATURES1_NUM * (int)SQ_NB) + 7) >> 3)));
+		checkCudaErrors(cudaMalloc((void**)&p2_dev, sizeof(PType)            * ((max_batch_size * ((int)MAX_FEATURES2_NUM) + 7) >> 3)));
 		checkCudaErrors(cudaMalloc((void**)&x1_dev, sizeof(NN_Input1)        * max_batch_size));
 		checkCudaErrors(cudaMalloc((void**)&x2_dev, sizeof(NN_Input2)        * max_batch_size));
 		checkCudaErrors(cudaMalloc((void**)&y1_dev, sizeof(NN_Output_Policy) * max_batch_size));
 		checkCudaErrors(cudaMalloc((void**)&y2_dev, sizeof(NN_Output_Value)  * max_batch_size));
 
-		inputBindings = { x1_dev, x2_dev, y1_dev, y2_dev };
+		infer_inputBindings = { x1_dev, x2_dev, y1_dev, y2_dev };
+#if defined(UNPACK_NVRTC)
+		unpack_inputBindings1 = { &p1_dev, &x1_dev, &unpack_size1 };
+		unpack_inputBindings2 = { &p2_dev, &x2_dev, &unpack_size2 };
+		// generate PTX code
+		nvrtcProgram nvrtc_program;
+		NVRTC_SAFE_CALL(nvrtcCreateProgram(&nvrtc_program, unpack_kernel_code, "unpack.cu", 0, NULL, NULL));
+		// GPU Compute Capability : https://developer.nvidia.com/cuda-gpus
+		const char* nvrtc_options[] = { "--gpu-architecture=compute_60" };
+		nvrtcResult nvrtc_compileResult = nvrtcCompileProgram(nvrtc_program, 1, nvrtc_options);
+		size_t nvrtc_log_size;
+		NVRTC_SAFE_CALL(nvrtcGetProgramLogSize(nvrtc_program, &nvrtc_log_size));
+		char* nvrtc_log = new char[nvrtc_log_size];
+		NVRTC_SAFE_CALL(nvrtcGetProgramLog(nvrtc_program, nvrtc_log));
+		sync_cout << nvrtc_log << sync_endl;
+		delete[] nvrtc_log;
+		if (nvrtc_compileResult != NVRTC_SUCCESS)
+			FatalError("NVRTC Compilation failed");
+		size_t ptx_size;
+		NVRTC_SAFE_CALL(nvrtcGetPTXSize(nvrtc_program, &ptx_size));
+		ptx = new char[ptx_size];
+		NVRTC_SAFE_CALL(nvrtcGetPTX(nvrtc_program, ptx));
+		NVRTC_SAFE_CALL(nvrtcDestroyProgram(&nvrtc_program));
+		CUDA_SAFE_CALL(cuDeviceGet(&unpack_cuDevice, gpu_id));
+#endif
 
 		return load_model(model_path);
 	}
@@ -94,7 +173,7 @@ namespace Eval::dlshogi
 	void NNTensorRT::release()
 	{
 		// load()でメモリ確保を行った場合、inputBindings.size() == 4のはず。
-		if (inputBindings.size())
+		if (infer_inputBindings.size())
 		{
 			// 安全のため、GPU IDをスレッドと関連付けてから開放する。
 			// ※　これは本来しなくても良いと思うのだが、ドライバー側の実装次第では
@@ -103,12 +182,22 @@ namespace Eval::dlshogi
 			// メモリを確保した時のCUDAデバイスを設定する。
 			set_device(gpu_id);
 
+#if defined(UNPACK_NVRTC)
+			delete[] ptx;
+			CUDA_SAFE_CALL(cuModuleUnload(unpack_cuModule));
+#endif
 			// メモリの開放
+			checkCudaErrors(cudaFree(p1_dev));
+			checkCudaErrors(cudaFree(p2_dev));
 			checkCudaErrors(cudaFree(x1_dev));
 			checkCudaErrors(cudaFree(x2_dev));
 			checkCudaErrors(cudaFree(y1_dev));
 			checkCudaErrors(cudaFree(y2_dev));
-			inputBindings.resize(0);
+#if defined(UNPACK_NVRTC)
+			unpack_inputBindings1.resize(0);
+			unpack_inputBindings2.resize(0);
+#endif
+			infer_inputBindings.resize(0);
 
 		}
 	}
@@ -231,8 +320,8 @@ namespace Eval::dlshogi
 			FatalError("buildSerializedNetwork");
 		}
 		auto runtime = InferUniquePtr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(gLogger));
-		engine.reset(runtime->deserializeCudaEngine(serializedEngine->data(), serializedEngine->size()));
-		if (!engine)
+		infer_engine.reset(runtime->deserializeCudaEngine(serializedEngine->data(), serializedEngine->size()));
+		if (!infer_engine)
 		{
 			FatalError("deserializeCudaEngine");
 		}
@@ -251,7 +340,7 @@ namespace Eval::dlshogi
 	Tools::Result NNTensorRT::load_model(const string& filename)
 	{
 		// 前に読み込んでいたものがあるなら、それを開放する。
-		engine.reset();
+		infer_engine.reset();
 
 		// シリアライズされたファイルがあるなら、それを代わりに読み込む。
 
@@ -294,15 +383,15 @@ namespace Eval::dlshogi
 		if (result.is_ok())
 		{
 			auto runtime = InferUniquePtr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(gLogger));
-			engine = InferUniquePtr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(modelPtr.get(), modelSize));
+			infer_engine = InferUniquePtr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(modelPtr.get(), modelSize));
 
 			// ドライバのバージョンが異なるなどが原因で、デシリアライズに失敗することがある。その場合はやりなおす。
-			if (!engine)
+			if (!infer_engine)
 				sync_cout << "info string Warning! TensorRT : Failed to deserialize the model file. filename = " << serialized_filename << sync_endl;
 		}
 
 		// デシリアライズされたファイルがなかったか、デシリアライズに失敗している。
-		if (!engine)
+		if (!infer_engine)
 		{
 			// 初回のみビルドが必要。
 			// シリアライズされたファイルを生成する。
@@ -311,7 +400,7 @@ namespace Eval::dlshogi
 			build(filename);
 
 			// serializing a model
-			auto serializedEngine = InferUniquePtr<nvinfer1::IHostMemory>(engine->serialize());
+			auto serializedEngine = InferUniquePtr<nvinfer1::IHostMemory>(infer_engine->serialize());
 			if (!serializedEngine)
 			{
 				//throw std::runtime_error("Engine serialization failed");
@@ -331,42 +420,46 @@ namespace Eval::dlshogi
 			}
 		}
 
-		context = InferUniquePtr<nvinfer1::IExecutionContext>(engine->createExecutionContext());
-		if (!context)
+		infer_context = InferUniquePtr<nvinfer1::IExecutionContext>(infer_engine->createExecutionContext());
+		if (!infer_context)
 		{
 			//throw std::runtime_error("createExecutionContext");
 				return Tools::ResultCode::FileWriteError;
 		}
 
-		inputDims1 = engine->getBindingDimensions(0);
-		inputDims2 = engine->getBindingDimensions(1);
+		inputDims1 = infer_engine->getBindingDimensions(0);
+		inputDims2 = infer_engine->getBindingDimensions(1);
 
+#if defined(UNPACK_NVRTC)
+		CUDA_SAFE_CALL(cuModuleLoadDataEx(&unpack_cuModule, ptx, 0, 0, 0));
+		CUDA_SAFE_CALL(cuModuleGetFunction(&unpack1_cuFunc, unpack_cuModule, "unpack1"));
+		CUDA_SAFE_CALL(cuModuleGetFunction(&unpack2_cuFunc, unpack_cuModule, "unpack2"));
+#endif
 		return Tools::ResultCode::Ok;
 	}
 
-	void NNTensorRT::forward(const int batch_size, NN_Input1* x1, NN_Input2* x2, NN_Output_Policy* y1, NN_Output_Value* y2)
+	void NNTensorRT::forward(const int batch_size, PType* p1, PType* p2, NN_Input1* x1, NN_Input2* x2, NN_Output_Policy* y1, NN_Output_Value* y2)
 	{
 		inputDims1.d[0] = batch_size;
 		inputDims2.d[0] = batch_size;
-		context->setBindingDimensions(0, inputDims1);
-		context->setBindingDimensions(1, inputDims2);
-
-#if 1
+		infer_context->setBindingDimensions(0, inputDims1);
+		infer_context->setBindingDimensions(1, inputDims2);
+#if defined(UNPACK_NVRTC)
+		unpack_size1 = batch_size * ((int)COLOR_NB * (int)MAX_FEATURES1_NUM);
+		unpack_size2 = batch_size * ((int)MAX_FEATURES2_NUM);
+		checkCudaErrors(cudaMemcpyAsync(p1_dev, p1, sizeof(PType) * ((batch_size * ((int)COLOR_NB * (int)MAX_FEATURES1_NUM * (int)SQ_NB) + 7) >> 3), cudaMemcpyHostToDevice, cudaStreamPerThread));
+		checkCudaErrors(cudaMemcpyAsync(p2_dev, p2, sizeof(PType) * ((batch_size * ((int)MAX_FEATURES2_NUM) + 7) >> 3), cudaMemcpyHostToDevice, cudaStreamPerThread));
+		CUDA_SAFE_CALL(cuLaunchKernel(unpack1_cuFunc, batch_size, 1, 1, (int)COLOR_NB * (int)MAX_FEATURES1_NUM, 1, 1, 0, cudaStreamPerThread, unpack_inputBindings1.data(), 0));
+		CUDA_SAFE_CALL(cuLaunchKernel(unpack2_cuFunc, batch_size, 1, 1, (int)MAX_FEATURES2_NUM, 1, 1, 0, cudaStreamPerThread, unpack_inputBindings2.data(), 0));
+#else
 		checkCudaErrors(cudaMemcpyAsync(x1_dev, x1, sizeof(NN_Input1) * batch_size, cudaMemcpyHostToDevice, cudaStreamPerThread));
 		checkCudaErrors(cudaMemcpyAsync(x2_dev, x2, sizeof(NN_Input2) * batch_size, cudaMemcpyHostToDevice, cudaStreamPerThread));
-		const bool status = context->enqueue(batch_size, inputBindings.data(), cudaStreamPerThread, nullptr);
+#endif
+		const bool status = infer_context->enqueue(batch_size, infer_inputBindings.data(), cudaStreamPerThread, nullptr);
 		ASSERT_LV3(status);
 		checkCudaErrors(cudaMemcpyAsync(y1, y1_dev, sizeof(NN_Output_Policy) * batch_size, cudaMemcpyDeviceToHost, cudaStreamPerThread));
 		checkCudaErrors(cudaMemcpyAsync(y2, y2_dev, sizeof(NN_Output_Value ) * batch_size, cudaMemcpyDeviceToHost, cudaStreamPerThread));
 		checkCudaErrors(cudaStreamSynchronize(cudaStreamPerThread));
-#else
-		checkCudaErrors(cudaMemcpy(x1_dev, x1, sizeof(NN_Input1) * batch_size, cudaMemcpyHostToDevice));
-		checkCudaErrors(cudaMemcpy(x2_dev, x2, sizeof(NN_Input2) * batch_size, cudaMemcpyHostToDevice));
-		const bool status = context->executeV2(inputBindings.data());
-		ASSERT_LV3(status);
-		checkCudaErrors(cudaMemcpy(y1, y1_dev, sizeof(NN_Output_Policy) * batch_size, cudaMemcpyDeviceToHost));
-		checkCudaErrors(cudaMemcpy(y2, y2_dev, sizeof(NN_Output_Value ) * batch_size, cudaMemcpyDeviceToHost));
-#endif
 	}
 
 } // namespace Eval::dlshogi
