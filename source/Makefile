@@ -335,9 +335,9 @@ ifneq (,$(findstring YANEURAOU_ENGINE_DEEP,$(YANEURAOU_EDITION)))
 
 		ifeq ($(YANEURAOU_EDITION),YANEURAOU_ENGINE_DEEP_TENSOR_RT)
 			CPPFLAGS += -DTENSOR_RT
-			LDFLAGS += -lnvinfer -lnvparsers -lnvonnxparser -lcudnn -lcudart
+			LDFLAGS += -lnvinfer -lnvparsers -lnvonnxparser -lcudnn -lcudart -lcuda -lnvrtc
 			# CPPFLAGS += -I/usr/local/cuda/include
-			# LDFLAGS += -L/usr/local/cuda/lib64
+			# LDFLAGS += -L/usr/local/cuda/lib64 -L/usr/local/cuda/lib64/stubs
 
 		else ifeq ($(YANEURAOU_EDITION),YANEURAOU_ENGINE_DEEP_ORT_CPU)
 			CPPFLAGS += -DORT_CPU
