@@ -51,18 +51,18 @@ namespace Eval::dlshogi
 			const PType bmask[8] = { 0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f };
 			const PType emask[8] = { 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80, 0x00 };
 			int f1idx_e = f1idx_b + ((int)COLOR_NB * (int)MAX_FEATURES1_NUM * (int)SQ_NB - 1);
+			int f2idx_e = f2idx_b + ((int)MAX_FEATURES2_NUM - 1);
 			int f1idx_bu = f1idx_b >> 3;
 			int f1idx_bl = f1idx_b & 7;
 			int f1idx_eu = f1idx_e >> 3;
 			int f1idx_el = f1idx_e & 7;
-			packed_features1[f1idx_bu] &= bmask[f1idx_bl];
-			std::fill_n(&packed_features1[f1idx_bu + 1], f1idx_eu - f1idx_bu - 1, (PType)0);
-			packed_features1[f1idx_eu] &= emask[f1idx_el];
-			int f2idx_e = f2idx_b + ((int)MAX_FEATURES2_NUM - 1);
 			int f2idx_bu = f2idx_b >> 3;
 			int f2idx_bl = f2idx_b & 7;
 			int f2idx_eu = f2idx_e >> 3;
 			int f2idx_el = f2idx_e & 7;
+			packed_features1[f1idx_bu] &= bmask[f1idx_bl];
+			std::fill_n(&packed_features1[f1idx_bu + 1], f1idx_eu - f1idx_bu - 1, (PType)0);
+			packed_features1[f1idx_eu] &= emask[f1idx_el];
 			packed_features2[f2idx_bu] &= bmask[f2idx_bl];
 			std::fill_n(&packed_features2[f2idx_bu + 1], f2idx_eu - f2idx_bu - 1, (PType)0);
 			packed_features2[f2idx_eu] &= emask[f2idx_el];
@@ -127,7 +127,7 @@ namespace Eval::dlshogi
 					// 利きの数のlayer数だけ、各layerに対してその升を1にしておく。
 					// (*features1)[c2][PIECETYPE_NUM + PIECETYPE_NUM + k][sq2] = dtype_one;
 					int f1idx = f1idx_b + (int)c2 * ((int)MAX_FEATURES1_NUM * (int)SQ_NB) + (PIECETYPE_NUM + PIECETYPE_NUM + k) * ((int)SQ_NB) + (int)sq2;
-					packed_features1[f1idx_u] |= (1 << (f1idx & 7));
+					packed_features1[f1idx >> 3] |= (1 << (f1idx & 7));
 				}
 			}
 
@@ -385,7 +385,7 @@ namespace Eval::dlshogi
 			}
 		}
 
-		{
+		if (position.in_check()) {
 			// 王手がかかっているか(のlayerが1枚)
 			// std::fill_n((*features2)[MAX_FEATURES2_HAND_NUM], SQ_NB, position.in_check() ? dtype_one : dtype_zero);
 			int f2idx = f2idx_b + (int)MAX_FEATURES2_HAND_NUM;
