@@ -6,6 +6,11 @@
 #include "tt.h"
 #include "testcmd/unit_test.h"
 
+#if defined(__EMSCRIPTEN__)
+// yaneuraou.wasm
+#include <emscripten.h>
+#endif
+
 #include <sstream>
 #include <queue>
 
@@ -144,8 +149,15 @@ namespace USI
 	std::string pv(const Position& pos, Depth depth, Value alpha, Value beta)
 	{
 		std::stringstream ss;
-		TimePoint elapsed = Time.elapsed() + 1;
 
+		TimePoint elapsed = Time.elapsed() + 1;
+#if defined(__EMSCRIPTEN__)
+		// yaneuraou.wasm
+		// Time.elapsed()が-1を返すことがある
+		// https://github.com/niklasf/stockfish.wasm/issues/5
+		// https://github.com/niklasf/stockfish.wasm/commit/4f591186650ab9729705dc01dec1b2d099cd5e29
+		elapsed = std::max(elapsed, TimePoint(1));
+#endif
 		const auto& rootMoves = pos.this_thread()->rootMoves;
 		size_t pvIdx = pos.this_thread()->pvIdx;
 		size_t multiPV = std::min((size_t)Options["MultiPV"], rootMoves.size());
@@ -183,7 +195,7 @@ namespace USI
 				<< " seldepth " << rootMoves[i].selDepth
 #if defined(USE_PIECE_VALUE)
 				<< " score "    << USI::value(v)
-#endif				
+#endif
 				;
 
 			// これが現在探索中の指し手であるなら、それがlowerboundかupperboundかは表示させる
@@ -318,6 +330,9 @@ void is_ready(bool skipCorruptCheck)
 
 	USI::read_engine_options(Path::Combine(Options["EvalDir"], "eval_options.txt"));
 
+	// yaneuraou.wasm
+	// ブラウザのメインスレッドをブロックしないよう、Keep Alive処理をコメントアウト
+#if !defined(__EMSCRIPTEN__)
 	// --- Keep Alive的な処理 ---
 
 	// "isready"を受け取ったあと、"readyok"を返すまで5秒ごとに改行を送るように修正する。(keep alive的な処理)
@@ -350,7 +365,7 @@ void is_ready(bool skipCorruptCheck)
 			if (++count >= 50 /* 5秒 */)
 			{
 				count = 0;
-				sync_cout << sync_endl; // 改行を送信する。	
+				sync_cout << sync_endl; // 改行を送信する。
 
 				// 定跡の読み込み部などで"info string.."で途中経過を出力する場合、
 				// sync_cout ～ sync_endlを用いて送信しないと、この改行を送るタイミングとかち合うと
@@ -365,6 +380,7 @@ void is_ready(bool skipCorruptCheck)
 		Tools::sleep(100);
 
 	// --- Keep Alive的な処理ここまで ---
+#endif
 
 	// スレッドを先に生成しないとUSI_Hashで確保したメモリクリアの並列化が行われなくて困る。
 
@@ -573,6 +589,7 @@ void go_cmd(const Position& pos, istringstream& is , StateListPtr& states , bool
 	bool ponderMode = false;
 
 	auto main_thread = Threads.main();
+
 	if (!states)
 	{
 		// 前回から"position"コマンドを処理せずに再度goが呼び出された。
@@ -607,7 +624,7 @@ void go_cmd(const Position& pos, istringstream& is , StateListPtr& states , bool
 
 	// エンジンオプションによる探索制限(0なら無制限)
 	// このあと、depthもしくはnodesが指定されていたら、その値で上書きされる。(この値は無視される)
-	
+
 	limits.depth = Options.count("DepthLimit") ? (int)Options["DepthLimit"] : 0;
 	limits.nodes = Options.count("NodesLimit") ? (u64)Options["NodesLimit"] : 0;
 
@@ -757,73 +774,9 @@ void search_cmd(Position& pos, istringstream& is)
 // --------------------
 
 // USI応答部本体
-void USI::loop(int argc, char* argv[])
+void usi_cmdexec(Position& pos, StateListPtr& states, string& cmd, queue<string>& cmds)
 {
-	// 探索開始局面(root)を格納するPositionクラス
-	// "position"コマンドで設定された局面が格納されている。
-	Position pos;
-
-	string cmd, token;
-
-	// 局面を遡るためのStateInfoのlist。
-	StateListPtr states(new StateList(1));
-
-	// 先行入力されているコマンド
-	// コマンドは前から取り出すのでqueueを用いる。
-	queue<string> cmds;
-
-	// ファイルからコマンドの指定
-	if (argc >= 3 && string(argv[1]) == "file")
-	{
-		vector<string> cmds0;
-		SystemIO::ReadAllLines(argv[2], cmds0);
-
-		// queueに変換する。
-		for (auto c : cmds0)
-			cmds.push(c);
-
-	} else {
-
-		// 引数として指定されたものを一つのコマンドとして実行する機能
-		// ただし、','が使われていれば、そこでコマンドが区切れているものとして解釈する。
-
-		for (int i = 1; i < argc; ++i)
-		{
-			string s = argv[i];
-
-			// sから前後のスペースを除去しないといけない。
-			while (*s.rbegin() == ' ') s.pop_back();
-			while (*s.begin() == ' ') s = s.substr(1, s.size() - 1);
-
-			if (s != ",")
-				cmd += s + " ";
-			else
-			{
-				cmds.push(cmd);
-				cmd = "";
-			}
-		}
-		if (cmd.size() != 0)
-			cmds.push(cmd);
-	}
-
-	do
-	{
-		if (cmds.size() == 0)
-		{
-			if (!std::getline(cin, cmd)) // 入力が来るかEOFがくるまでここで待機する。
-				cmd = "quit";
-		} else {
-			// 積んであるコマンドがあるならそれを実行する。
-			// 尽きれば"quit"だと解釈してdoループを抜ける仕様にすることはできるが、
-			// そうしてしまうとgoコマンド(これはノンブロッキングなので)の最中にquitが送られてしまう。
-			// ただ、
-			// YaneuraOu-mid.exe bench,quit
-			// のようなことは出来るのでPGOの役には立ちそうである。
-			cmd = cmds.front();
-			cmds.pop();
-		}
-
+	string token;
 		istringstream is(cmd);
 
 		token.clear(); // getlineが空を返したときのためのクリア
@@ -901,10 +854,10 @@ void USI::loop(int argc, char* argv[])
 		// そもそもで言うと、"usinewgame"に対してはエンジン側は何ら応答を返さないので、
 		// GUI側は、エンジン側が処理中なのかどうかが判断できない。
 		// なのでここで長い時間のかかる処理はすべきではないと思うのだが。
-		else if (token == "usinewgame") continue;
+		else if (token == "usinewgame") return;
 
 		// 思考エンジンの準備が出来たかの確認
-		else if (token == "isready") is_ready_cmd(pos,states);
+		else if (token == "isready") is_ready_cmd(pos, states);
 
 		// 以下、デバッグのためのカスタムコマンド(非USIコマンド)
 		// 探索中には使わないようにすべし。
@@ -994,7 +947,7 @@ void USI::loop(int argc, char* argv[])
 		// この局面での1手詰め判定
 		else if (token == "mate1") cout << pos.mate1ply() << endl;
 #endif
-		
+
 #if defined (ENABLE_TEST_CMD)
 		// テストコマンド
 		else if (token == "test") Test::test_cmd(pos, is);
@@ -1053,6 +1006,79 @@ void USI::loop(int argc, char* argv[])
 			OPTION_FOUND:;
 			}
 		}
+}
+
+// USI応答部ループ
+void USI::loop(int argc, char* argv[])
+{
+	// 探索開始局面(root)を格納するPositionクラス
+	// "position"コマンドで設定された局面が格納されている。
+	Position pos;
+
+	string cmd, token;
+
+	// 局面を遡るためのStateInfoのlist。
+	StateListPtr states(new StateList(1));
+
+	// 先行入力されているコマンド
+	// コマンドは前から取り出すのでqueueを用いる。
+	queue<string> cmds;
+
+	// ファイルからコマンドの指定
+	if (argc >= 3 && string(argv[1]) == "file")
+	{
+		vector<string> cmds0;
+		SystemIO::ReadAllLines(argv[2], cmds0);
+
+		// queueに変換する。
+		for (auto c : cmds0)
+			cmds.push(c);
+
+	} else {
+
+		// 引数として指定されたものを一つのコマンドとして実行する機能
+		// ただし、','が使われていれば、そこでコマンドが区切れているものとして解釈する。
+
+		for (int i = 1; i < argc; ++i)
+		{
+			string s = argv[i];
+
+			// sから前後のスペースを除去しないといけない。
+			while (*s.rbegin() == ' ') s.pop_back();
+			while (*s.begin() == ' ') s = s.substr(1, s.size() - 1);
+
+			if (s != ",")
+				cmd += s + " ";
+			else
+			{
+				cmds.push(cmd);
+				cmd = "";
+			}
+		}
+		if (cmd.size() != 0)
+			cmds.push(cmd);
+	}
+
+	do
+	{
+		if (cmds.size() == 0)
+		{
+			if (!std::getline(cin, cmd)) // 入力が来るかEOFがくるまでここで待機する。
+				cmd = "quit";
+		} else {
+			// 積んであるコマンドがあるならそれを実行する。
+			// 尽きれば"quit"だと解釈してdoループを抜ける仕様にすることはできるが、
+			// そうしてしまうとgoコマンド(これはノンブロッキングなので)の最中にquitが送られてしまう。
+			// ただ、
+			// YaneuraOu-mid.exe bench,quit
+			// のようなことは出来るのでPGOの役には立ちそうである。
+			cmd = cmds.front();
+			cmds.pop();
+		}
+		istringstream is(cmd);
+		is >> skipws >> token;
+
+		usi_cmdexec(pos, states, cmd, cmds);
 
 	} while (token != "quit");
 
@@ -1269,7 +1295,7 @@ void USI::UnitTest(Test::UnitTester& tester)
 				Move m = USI::to_move(pos,token);
 				if (m == MOVE_NONE)
 					fail = true;
-				
+
 				pos.do_move(m, si[pos.game_ply()]);
 			}
 
@@ -1279,3 +1305,37 @@ void USI::UnitTest(Test::UnitTester& tester)
 
 	}
 }
+
+#if defined(__EMSCRIPTEN__)
+// --------------------
+// EMSCRIPTEN support
+// --------------------
+
+// USI応答部 emscriptenインターフェース
+EMSCRIPTEN_KEEPALIVE extern "C" int usi_command(const char *c_cmd) {
+	std::string cmd(c_cmd);
+	queue<string> cmds;
+
+	static Position pos;
+	string token;
+	static StateListPtr states(new StateList(1));
+
+	for (Thread* th : Threads) {
+		if (!th->threadStarted)
+			return 1;
+	}
+
+	while (true) {
+		usi_cmdexec(pos, states, cmd, cmds);
+		if (cmds.size() == 0) {
+			break;
+		} else {
+			// 積んであるコマンドがあるならそれを実行する。
+			cmd = cmds.front();
+			cmds.pop();
+		}
+	}
+
+	return 0;
+}
+#endif
