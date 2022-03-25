@@ -1,0 +1,50 @@
+{
+  "private": true,
+  "name": "@mizarjp/yaneuraou",
+  "description": "YaneuraOu is the World's Strongest Shogi engine(AI player) , WCSC29 1st winner , educational and USI compliant engine.",
+  "keywords": [
+    "shogi",
+    "emscripten",
+    "webassembly"
+  ],
+  "license": "GPL-3.0",
+  "repository": "github:mizar/YaneuraOu.wasm",
+  "homepage": "https://github.com/yaneurao/YaneuraOu.wasm/",
+  "scripts": {
+    "versionup": "lerna version --force-publish=@mizarjp/yaneuraou.*",
+    "versionup:prepatch": "lerna version prepatch --force-publish=@mizarjp/yaneuraou.*",
+    "versionup:prerelease": "lerna version prerelease --force-publish=@mizarjp/yaneuraou.*",
+    "publish": "lerna publish --force-publish=@mizarjp/yaneuraou.*",
+    "publish:prepatch": "lerna publish prepatch --force-publish=@mizarjp/yaneuraou.*",
+    "publish:prerelease": "lerna publish prerelease --force-publish=@mizarjp/yaneuraou.*",
+    "publish:git": "lerna publish from-git --force-publish=@mizarjp/yaneuraou.*",
+    "publish:package": "lerna publish from-package --force-publish=@mizarjp/yaneuraou.*",
+    "serve": "node script/express.js",
+    "build": "node script/wasm_build.js",
+    "prepublish": "node script/wasm_docker_build.js",
+    "eval:halfkp": "curl --create-dirs -RLo .dl/suisho5_20211123.halfkp.nnue.cpp.gz https://github.com/mizar/YaneuraOu/releases/download/resource/suisho5_20211123.halfkp.nnue.cpp.gz && gzip -cd .dl/suisho5_20211123.halfkp.nnue.cpp.gz > source/eval/nnue/embedded_nnue.cpp",
+    "eval:k-p": "curl --create-dirs -RLo .dl/suishopetite_20211123.k_p.nnue.cpp.gz https://github.com/mizar/YaneuraOu/releases/download/resource/suishopetite_20211123.k_p.nnue.cpp.gz && gzip -cd .dl/suishopetite_20211123.k_p.nnue.cpp.gz > source/eval/nnue/embedded_nnue.cpp",
+    "halfkp": "node script/wasm_docker_build.js halfkp",
+    "k-p": "node script/wasm_docker_build.js k-p",
+    "halfkp.noeval": "node script/wasm_docker_build.js halfkp.noeval",
+    "halfkpe9.noeval": "node script/wasm_docker_build.js halfkpe9.noeval",
+    "halfkpvm.noeval": "node script/wasm_docker_build.js halfkpvm.noeval",
+    "k-p.noeval": "node script/wasm_docker_build.js k-p.noeval",
+    "material": "node script/wasm_docker_build.js material",
+    "material9": "node script/wasm_docker_build.js material9"
+  },
+  "workspaces": {
+    "packages": [
+      "npmpackages/*"
+    ]
+  },
+  "devDependencies": {
+    "@types/emscripten": "^1.39.6",
+    "@types/node": "^17.0.25",
+    "express": "^4.17.3",
+    "express-static-gzip": "^2.1.5",
+    "lerna": "^4.0.0",
+    "ts-node": "^10.7.0",
+    "typescript": "^4.6.3"
+  }
+}
