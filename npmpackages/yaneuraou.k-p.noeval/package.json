@@ -1,0 +1,45 @@
+{
+  "name": "@mizarjp/yaneuraou.k-p.noeval",
+  "version": "7.6.2-alpha.1",
+  "description": "YaneuraOu shogi engine (NNUE K-P noeval)",
+  "keywords": [
+    "shogi",
+    "emscripten",
+    "webassembly"
+  ],
+  "author": "Mizar <mizar.jp@gmail.com>",
+  "homepage": "https://github.com/mizar/YaneuraOu.wasm/tree/wasm/npmpackages/yaneuraou.k-p.noeval#readme",
+  "license": "GPL-3.0",
+  "main": "lib/yaneuraou.k-p.noeval.js",
+  "types": "lib/yaneuraou.k-p.noeval.d.ts",
+  "bin": {
+    "usi.k-p.noeval": "usi.k-p.noeval.js"
+  },
+  "directories": {
+    "lib": "lib",
+    "test": "__tests__"
+  },
+  "files": [
+    "lib/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mizar/YaneuraOu.wasm.git"
+  },
+  "scripts": {
+    "test": "echo \"Error: run tests from root\" && exit 1"
+  },
+  "bugs": {
+    "url": "https://github.com/mizar/YaneuraOu.wasm/issues"
+  },
+  "devDependencies": {
+    "@types/emscripten": "^1.39.6",
+    "@types/node": "^17.0.41",
+    "ts-node": "^10.8.1",
+    "typescript": "^4.7.3"
+  },
+  "gitHead": "58bb7a5a23c9765ea67e674194466f23810e37b8"
+}
