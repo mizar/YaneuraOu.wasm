@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8" />
+  <title>YaneuraOu.wasm</title>
+  <meta
+    name="viewport"
+    content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no"
+  />
+  <!-- By curl https://data-url-maker-hiro18181.netlify.app/api/url/https://lab.mzr.jp/shogiking.svg -->
+  <link
+    rel="icon"
+    href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPjxwYXRoIGZpbGw9IiNmZDciIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIzMiIgZD0ibTcyIDEwMDIgMTQwLTg4MyAzMDAtOTkgMzAwIDk5IDE0MCA4ODNINzJaIi8+PHBhdGggZD0iTTM0MiA4MDAgMjEyIDQzM2wxNzYgMTE3LTQyLTI0MCAxNjYgMTg0IDE2Ni0xODQtNDIgMjQwIDE3Ni0xMTctMTMwIDM2N2EyNzEgMjcxIDAgMCAwLTM0MCAwWiIvPjwvc3ZnPg=="
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&family=Roboto+Mono&display=swap" rel="stylesheet" />
+</head>
+
+<!-- CSS -->
+
+<style>
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font: inherit;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  #root {
+    font-family: "Roboto Mono", "Noto Sans JP";
+    font-size: 13px;
+  }
+
+  main {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+  }
+
+  #mode {
+    display: flex;
+    margin-bottom: 6px;
+  }
+
+  #input {
+    display: flex;
+    margin-bottom: 10px;
+  }
+
+  #mode #evaltype, #mode #usihash {
+    margin-right: 6px;
+    background: #eee;
+  }
+
+  #input #command {
+    width: 80%;
+    padding: 2px 0 2px 6px;
+    border: 1px solid #ddd;
+    border-right: 0;
+  }
+
+  #input #send {
+    display: inline-block;
+    padding: 3px 6px 3px 6px;
+    background: #888;
+    color: #fff;
+    font-weight: bold;
+    margin-right: 6px;
+    cursor: pointer;
+  }
+
+  #input #examples {
+    width: 150px;
+    background: #eee;
+  }
+
+  #misc {
+    margin-bottom: 10px;
+  }
+
+  #output {
+    flex: 1 1 auto;
+    width: 100%;
+    border: 1px solid #ddd;
+    padding: 10px;
+    overflow: scroll;
+    box-shadow: inset 1px 1px 2px #eee;
+    font-size: 11px;
+    font-family: "Roboto Mono", "Noto Sans JP";
+  }
+</style>
+
+<body>
+  <div id="root"></div>
+
+  <!-- Javascript -->
+
+  <script src="https://cdn.jsdelivr.net/npm/mithril@2.0.4/mithril.min.js"></script>
+  <script>
+    (() => {
+      const queries = {};
+      const queryStr = window.location.search.slice(1);
+      if (queryStr) {
+        queryStr.split(';').forEach(function(s){
+          const queryArr = s.split('=');
+          queries[queryArr[0]] = queryArr[1];
+        });
+      }
+
+      const infoList = [
+        {
+          ident: "k-p",
+          labal: "K-P(SuishoPetite)",
+          func: "YaneuraOu_K_P",
+          js: "./k-p/lib/yaneuraou.k-p.js",
+          wasm: "./k-p/lib/yaneuraou.k-p.wasm",
+          isnnue: true,
+          ready: true,
+        },
+        {
+          ident: "halfkp",
+          labal: "HalfKP(Suisho5)",
+          func: "YaneuraOu_HalfKP",
+          js: "./halfkp/lib/yaneuraou.halfkp.js",
+          wasm: "./halfkp/lib/yaneuraou.halfkp.wasm",
+          isnnue: true,
+          ready: true,
+        },
+        {
+          ident: "material",
+          labal: "MaterialLv1",
+          func: "YaneuraOu_Material",
+          js: "./material/lib/yaneuraou.material.js",
+          wasm: "./material/lib/yaneuraou.material.wasm",
+          isnnue: false,
+          ready: true,
+        },
+        {
+          ident: "material9",
+          labal: "MaterialLv9",
+          func: "YaneuraOu_Material9",
+          js: "./material9/lib/yaneuraou.material9.js",
+          wasm: "./material9/lib/yaneuraou.material9.wasm",
+          isnnue: false,
+          ready: true,
+        },
+        {
+          ident: "k-p.noeval",
+          labal: "K-P(noeval)",
+          func: "YaneuraOu_K_P_noeval",
+          js: "./k-p.noeval/lib/yaneuraou.k-p.noeval.js",
+          wasm: "./k-p.noeval/lib/yaneuraou.k-p.noeval.wasm",
+          isnnue: true,
+          ready: false,
+        },
+        {
+          ident: "halfkp.noeval",
+          labal: "HalfKP(noeval)",
+          func: "YaneuraOu_HalfKP_noeval",
+          js: "./halfkp.noeval/lib/yaneuraou.halfkp.noeval.js",
+          wasm: "./halfkp.noeval/lib/yaneuraou.halfkp.noeval.wasm",
+          isnnue: true,
+          ready: false,
+        },
+        {
+          ident: "halfkpe9.noeval",
+          labal: "HalfKPE9(noeval)",
+          func: "YaneuraOu_HalfKPE9_noeval",
+          js: "./halfkpe9.noeval/lib/yaneuraou.halfkpe9.noeval.js",
+          wasm: "./halfkpe9.noeval/lib/yaneuraou.halfkpe9.noeval.wasm",
+          isnnue: true,
+          ready: false,
+        },
+        {
+          ident: "halfkpvm.noeval",
+          labal: "HalfKPvm(noeval)",
+          func: "YaneuraOu_HalfKPvm_noeval",
+          js: "./halfkpvm.noeval/lib/yaneuraou.halfkpvm.noeval.js",
+          wasm: "./halfkpvm.noeval/lib/yaneuraou.halfkpvm.noeval.wasm",
+          isnnue: true,
+          ready: false,
+        },
+      ].map((v, i) => { v.idx = i; return v; });
+      const infoMap = {};
+      infoList.forEach((v) => {
+        infoMap[v.ident] = v;
+      });
+
+      const evalTypeInfo = () => {
+        let key = `${queries['EvalType']}`.toLowerCase();
+        return infoMap[key] || infoMap['k-p'];
+      };
+
+      const $ = (...args) => document.querySelector(...args);
+
+      const formatMB = (n) => {
+        return (n ? (n / 1e6).toPrecision(3) : "?") + "MB";
+      };
+
+      const hardwareConcurrency = navigator.hardwareConcurrency;
+
+      const isSupported = () => {
+        if (typeof WebAssembly !== "object") return 'WebAssembly not defined';
+        const source = Uint8Array.from([
+          0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 7, 8,
+          1, 4, 116, 101, 115, 116, 0, 0, 10, 15, 1, 13, 0, 65, 0, 253, 17, 65, 0,
+          253, 17, 253, 186, 1, 11,
+        ]);
+        if (
+          typeof WebAssembly.validate !== "function" ||
+          !WebAssembly.validate(source)
+        )
+          return 'WebAssembly validation failed';
+        if (typeof Atomics !== "object") return 'Atomics not defined';
+        if (typeof SharedArrayBuffer !== "function") return 'SharedArrayBuffer not defined';
+        return true;
+      };
+
+      const RequestProgress = ({ attrs: { url, onFinishDownload } }) => {
+        let state = "INIT"; // 'LOADING', 'DONE', 'FAILED'
+        let loaded = 0;
+        let total = 0;
+
+        const oninit = () => {
+          state = "LOADING";
+          m.request({
+            url: url,
+            method: "GET",
+            responseType: "arraybuffer",
+            headers: { Accept: "*/*" },
+            config: (xhr) => {
+              xhr.onprogress = (e) => {
+                // TODO:
+                // When gzip compressed, the value of "loaded/total" gets messed up.
+                // On Chrome, "loaded" is the value after decompression, but on the other hand,
+                // On Firefox, "loaded" is the value before decompression.
+                loaded = e.loaded;
+                total =
+                  e.total ||
+                  Number(
+                    e.target.getResponseHeader("x-decompressed-content-length")
+                  );
+                m.redraw();
+              };
+            },
+          }).then(
+            (response) => {
+              state = "DONE";
+              onFinishDownload(response);
+            },
+            (e) => {
+              console.error(e);
+              state = "FAILED";
+              onFinishDownload(null);
+            }
+          );
+        };
+
+        const view = () => {
+          const fraction =
+            total == -1 ? `?MB/?MB` : `${formatMB(loaded)}/${formatMB(total)}`;
+          return m("span", [
+            `${fraction} [${state}] `,
+            m(
+              "span",
+              {
+                style: "cursor: pointer;",
+                onclick: () =>
+                  window.alert(
+                    "On some browsers, download size might look contradicted due to file compression."
+                  ),
+              },
+              "[?]"
+            ),
+          ]);
+        };
+
+        return { oninit, view };
+      };
+
+      const App = () => {
+        let yaneuraou = null;
+        let yaneuraou_state = "INIT"; // 'LOADING', 'BEFOREREADY', 'READY', 'FAILED'
+        let output = "";
+        let tail_mode = true;
+
+        const examples = [
+          "usi",
+          "isready",
+          "go depth 20",
+          "go depth 28",
+          "go movetime 10000",
+          "go movetime 30000",
+          "stop",
+          "d",
+          "eval",
+          "getoption",
+          "moves",
+          "side",
+          "mated",
+          "key",
+          "position startpos",
+          "position sfen ln1g5/1r4k2/p2pppn2/2ps2p2/1p7/2P6/PPSPPPPLP/2G2K1pr/LN4G1b b BG2SLPnp 1",
+          "setoption name Threads value 1",
+          `setoption name Threads value ${Math.min(hardwareConcurrency, 32)}`,
+          "bench 1024 1 limit 4 type time",
+          `bench 1024 ${Math.min(hardwareConcurrency, 32)} limit 4 type time`,
+        ];
+
+        const postCommand = (command) => {
+          output += ">> " + command + "\n";
+          m.redraw();
+          yaneuraou.postMessage(command);
+        };
+
+        const wCache = {};
+        const postCommandWait = (command, waitResp, ...gatherResps) => {
+          wCache[waitResp] = true;
+          for (const gatherResp of gatherResps) {
+            rCache[gatherResp] = null;
+          }
+          postCommand(command);
+          return new Promise((resolve) => {
+            (function poll() {
+              if (wCache[waitResp]) {
+                setTimeout(poll, 1);
+              } else {
+                delete wCache[waitResp];
+                resolve();
+              }
+            })();
+          });
+        };
+
+        const sendCommand = () => {
+          const command = $("#command").value;
+          if (command.length > 0) {
+            postCommand(command);
+          }
+        };
+
+        const scrollOutput = () => {
+          if (!tail_mode) {
+            return;
+          }
+          $("#output").scrollTo({
+            top: $("#output").scrollHeight,
+            behavior: "smooth",
+          });
+        };
+
+        // Make error catchable
+        const loadYaneuraOu = async (params) => {
+          return window[evalTypeInfo().func](params);
+        };
+
+        const onFinishDownload = (data) => {
+          if (!data) {
+            yaneuraou_state = "FAILED";
+            m.redraw();
+            return;
+          }
+
+          loadYaneuraOu({ wasmBinary: data })
+            .then(async (_yaneuraou) => {
+              yaneuraou = _yaneuraou;
+              yaneuraou_state = "READY";
+              yaneuraou.addMessageListener((line) => {
+                output += line + "\n";
+                m.redraw();
+                Object.keys(wCache)
+                  .filter((v) => `${line}`.startsWith(v))
+                  .forEach((v) => { wCache[v] = false; });
+              });
+              postCommand('compiler');
+              await postCommandWait('usi', 'usiok');
+              postCommand(`setoption name USI_Hash value ${Math.min(Math.max(queries['USI_Hash']||0, 16), 1024)}`);
+              postCommand('setoption name PvInterval value 0');
+              postCommand(`setoption name Threads value ${Math.min(hardwareConcurrency, 32)}`);
+              if (evalTypeInfo().ready) {
+                await postCommandWait('isready', 'readyok');
+                postCommand('position startpos');
+                await postCommandWait('d', 'sfen');
+              }
+            })
+            .catch((e) => {
+              yaneuraou_state = "FAILED";
+              output += "---error\n" + e + "\n";
+              throw e;
+            })
+            .finally(() => m.redraw());
+        };
+
+        const onSelectNnueFile = async (e) => {
+          const selected = e.currentTarget.files[0];
+          if (selected) {
+            //
+            // TODO:
+            // On Archlinux Chromium 92.0.4515.107, most of times this code fails with the error saying:
+            //   TypeError: Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared.
+            // Chrome with the same version and Firefox never fails.
+            //
+            const FS = yaneuraou.FS;
+            const buffer = await selected.arrayBuffer();
+            const array = new Uint8Array(buffer);
+            const filename = `/${selected.name}`;
+            FS.writeFile(filename, array);
+            yaneuraou.postMessage("setoption name EvalDir value .");
+            yaneuraou.postMessage(`setoption name EvalFile value ${selected.name}`);
+            yaneuraou.postMessage("isready");
+            yaneuraou.postMessage("eval");
+          }
+        };
+
+        const oninit = () => {
+          yaneuraou_state = "LOADING";
+        };
+
+        const view = () => {
+          const is_ready = yaneuraou_state == "READY";
+
+          return m("main", [
+            m("div#mode", [
+              m(
+                "select#evaltype",
+                {
+                  selectedIndex: evalTypeInfo().idx,
+                  onchange: (e) => {
+                    if (is_ready) {
+                      yaneuraou.terminate();
+                    }
+                    location.replace(`?EvalType=${e.target.value};USI_Hash=${queries['USI_Hash']|0||16}`);
+                  }
+                },
+                infoList.map((v) => m("option", { value: v.ident }, v.labal)),
+              ),
+              m(
+                "select#usihash",
+                {
+                  selectedIndex: {
+                    '16': 0,
+                    '32': 1,
+                    '64': 2,
+                    '128': 3,
+                    '256': 4,
+                    '512': 5,
+                    '1024': 6,
+                  }[`${queries['USI_Hash']}`.toLowerCase()]|0,
+                  onchange: (e) => {
+                    if (is_ready) {
+                      yaneuraou.terminate();
+                    }
+                    location.replace(`?EvalType=${queries['EvalType']||''};USI_Hash=${e.target.value}`);
+                  }
+                },
+                [
+                  m("option", { value: 16 }, "USI_Hash=16"),
+                  m("option", { value: 32 }, "USI_Hash=32"),
+                  m("option", { value: 64 }, "USI_Hash=64"),
+                  m("option", { value: 128 }, "USI_Hash=128"),
+                  m("option", { value: 256 }, "USI_Hash=256"),
+                  m("option", { value: 512 }, "USI_Hash=512"),
+                  m("option", { value: 1024 }, "USI_Hash=1024"),
+                ]
+              ),
+            ]),
+            m("div#input", [
+              m("input#command", {
+                placeholder: "Input USI Command Here",
+                disabled: !is_ready,
+                onkeyup: (e) => {
+                  if (e.keyCode != 13) {
+                    e.redraw = false;
+                    return;
+                  }
+                  sendCommand();
+                },
+              }),
+              m(
+                "span#send",
+                { disabled: !is_ready, onclick: sendCommand },
+                "SEND"
+              ),
+              m(
+                "select#examples",
+                {
+                  disabled: !is_ready,
+                  onchange: (e) => {
+                    $("#command").value = e.target.value;
+                    window.setTimeout(sendCommand, 10);
+                  },
+                },
+                [
+                  m("option", { value: "" }, "-- EXAMPLE --"),
+                  ...examples.map((ex, index) => m("option", { value: ex }, ex)),
+                ]
+              ),
+            ]),
+            m("div#misc", [
+              m("div", [
+                "- Download: ",
+                m(RequestProgress, {
+                  url: evalTypeInfo().wasm,
+                  onFinishDownload,
+                }),
+              ]),
+              m("div", [
+                m("div", `- YaneuraOu state: ${yaneuraou_state}`),
+                m("span", { style: "margin-right: 5px;" }, "- Tail mode:"),
+                m(
+                  "span",
+                  {
+                    style: "cursor: pointer;",
+                    onclick: () => {
+                      tail_mode = !tail_mode;
+                      scrollOutput();
+                    },
+                  },
+                  [tail_mode ? "[x]" : "[ ]"]
+                ),
+              ]),
+              m("div", [
+                "- NNUE file: ",
+                m("input", {
+                  type: "file",
+                  disabled: !is_ready || !(evalTypeInfo().isnnue),
+                  onchange: onSelectNnueFile,
+                }),
+              ]),
+            ]),
+            m("div#output", { onupdate: scrollOutput }, m("pre", output)),
+            m("div#footer", [
+              "WebAssembly fork WIP source: ",
+              m("a", { href: "https://github.com/mizar/lib/YaneuraOu.wasm/tree/wasm/" }, "https://github.com/mizar/lib/YaneuraOu.wasm/tree/wasm/"),
+              ".",
+            ]),
+          ]);
+        };
+
+        return { oninit, view };
+      };
+
+      if (isSupported() !== true) {
+        window.alert(
+          "Your browser is not supported. {{ crossOriginIsolated: " + String(crossOriginIsolated) + " }} {{ " + String(isSupported()) + " }} For more information, please take a look at https://github.com/yaneurao/YaneuraOu/."
+        );
+      } else {
+        const scr = document.createElement('script');
+        scr.type = 'text/javascript';
+        scr.src = evalTypeInfo().js;
+        const s = document.getElementsByTagName('script')[0];
+        scr.onload = (_e) => {
+          m.mount($("#root"), App);
+        };
+        s.parentNode.insertBefore(scr, s);
+      }
+    })();
+  </script>
+</body>
