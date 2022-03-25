@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8" />
+  <title>YaneuraOu.wasm</title>
+  <meta
+    name="viewport"
+    content="width=device-width, height=device-height, initial-scale=1, maximum-scale=0.5"
+  />
+  <!-- By curl https://data-url-maker-hiro18181.netlify.app/api/url/https://lab.mzr.jp/shogiking.svg -->
+  <link
+    rel="icon"
+    href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPjxwYXRoIGZpbGw9IiNmZDciIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIzMiIgZD0ibTcyIDEwMDIgMTQwLTg4MyAzMDAtOTkgMzAwIDk5IDE0MCA4ODNINzJaIi8+PHBhdGggZD0iTTM0MiA4MDAgMjEyIDQzM2wxNzYgMTE3LTQyLTI0MCAxNjYgMTg0IDE2Ni0xODQtNDIgMjQwIDE3Ni0xMTctMTMwIDM2N2EyNzEgMjcxIDAgMCAwLTM0MCAwWiIvPjwvc3ZnPg=="
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP&family=Roboto+Mono&display=swap" rel="stylesheet" />
+</head>
+
+<!-- CSS -->
+
+<style>
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font: inherit;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  #root {
+    font-family: "Roboto Mono", "Noto Sans JP";
+    font-size: 13px;
+  }
+
+  main {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+  }
+
+  #mode {
+    display: flex;
+    margin-bottom: 6px;
+  }
+
+  #input {
+    display: flex;
+    margin-bottom: 10px;
+  }
+
+  #mode #evaltype, #mode #usihash, #mode #movetime {
+    margin-right: 6px;
+    background: #eee;
+  }
+
+  #input #command {
+    width: 80%;
+    padding: 2px 0 2px 6px;
+    border: 1px solid #ddd;
+    border-right: 0;
+  }
+
+  #selfplay {
+    padding: 3px 6px 3px 6px;
+    font-weight: bold;
+    margin-right: 6px;
+    cursor: pointer;
+  }
+
+  #selfplay:disabled {
+    cursor: unset;
+  }
+
+  #input #examples {
+    width: 150px;
+    background: #eee;
+  }
+
+  #misc {
+    margin-bottom: 10px;
+  }
+
+  #output {
+    flex: 1 1 auto;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #oig {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+  }
+
+  #board {
+    flex: 0 0 auto;
+    width: 580px;
+    height: 100%;
+    border: 1px solid #ddd;
+    overflow: hidden;
+  }
+
+  #opre {
+    flex: 1 1 auto;
+    height: 100%;
+    overflow: scroll;
+    padding: 10px;
+    border: 1px solid #ddd;
+    box-shadow: inset 1px 1px 2px #eee;
+    font-size: 11px;
+  }
+
+</style>
+
+<body>
+  <div id="root"></div>
+
+  <!-- Javascript -->
+
+  <script src="https://cdn.jsdelivr.net/npm/mithril@2.0.4/mithril.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kifu-for-js@3/bundle/kifu-for-js.min.js"></script>
+  <script>
+    (() => {
+      const queries = {};
+      const queryStr = window.location.search.slice(1);
+      if (queryStr) {
+        queryStr.split(';').forEach(function(s){
+          const queryArr = s.split('=');
+          queries[queryArr[0]] = queryArr[1];
+        });
+      }
+
+      const infoList = [
+        {
+          ident: "k-p",
+          labal: "K-P(SuishoPetite)",
+          func: "YaneuraOu_K_P",
+          js: "./k-p/lib/yaneuraou.k-p.js",
+          wasm: "./k-p/lib/yaneuraou.k-p.wasm",
+          isnnue: true,
+          ready: true,
+        },
+        {
+          ident: "halfkp",
+          labal: "HalfKP(Suisho5)",
+          func: "YaneuraOu_HalfKP",
+          js: "./halfkp/lib/yaneuraou.halfkp.js",
+          wasm: "./halfkp/lib/yaneuraou.halfkp.wasm",
+          isnnue: true,
+          ready: true,
+        },
+        {
+          ident: "material",
+          labal: "MaterialLv1",
+          func: "YaneuraOu_Material",
+          js: "./material/lib/yaneuraou.material.js",
+          wasm: "./material/lib/yaneuraou.material.wasm",
+          isnnue: false,
+          ready: true,
+        },
+        {
+          ident: "material9",
+          labal: "MaterialLv9",
+          func: "YaneuraOu_Material9",
+          js: "./material9/lib/yaneuraou.material9.js",
+          wasm: "./material9/lib/yaneuraou.material9.wasm",
+          isnnue: false,
+          ready: true,
+        },
+      ].map((v, i) => { v.idx = i; return v; });
+      const infoMap = {};
+      infoList.forEach((v) => {
+        infoMap[v.ident] = v;
+      });
+
+      const evalTypeInfo = () => {
+        let key = `${queries['EvalType']}`.toLowerCase();
+        return infoMap[key] || infoMap['k-p'];
+      };
+
+      const $ = (...args) => document.querySelector(...args);
+
+      const formatMB = (n) => {
+        return (n ? (n / 1e6).toPrecision(3) : "?") + "MB";
+      };
+
+      const hardwareConcurrency = navigator.hardwareConcurrency;
+
+      const isSupported = () => {
+        if (typeof WebAssembly !== "object") return 'WebAssembly not defined';
+        const source = Uint8Array.from([
+          0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 7, 8,
+          1, 4, 116, 101, 115, 116, 0, 0, 10, 15, 1, 13, 0, 65, 0, 253, 17, 65, 0,
+          253, 17, 253, 186, 1, 11,
+        ]);
+        if (
+          typeof WebAssembly.validate !== "function" ||
+          !WebAssembly.validate(source)
+        )
+          return 'WebAssembly validation failed';
+        if (typeof Atomics !== "object") return 'Atomics not defined';
+        if (typeof SharedArrayBuffer !== "function") return 'SharedArrayBuffer not defined';
+        return true;
+      };
+
+      const RequestProgress = ({ attrs: { url, onFinishDownload } }) => {
+        let state = "INIT"; // 'LOADING', 'DONE', 'FAILED'
+        let loaded = 0;
+        let total = 0;
+
+        const oninit = () => {
+          state = "LOADING";
+          m.request({
+            url: url,
+            method: "GET",
+            responseType: "arraybuffer",
+            headers: { Accept: "*/*" },
+            config: (xhr) => {
+              xhr.onprogress = (e) => {
+                // TODO:
+                // When gzip compressed, the value of "loaded/total" gets messed up.
+                // On Chrome, "loaded" is the value after decompression, but on the other hand,
+                // On Firefox, "loaded" is the value before decompression.
+                loaded = e.loaded;
+                total =
+                  e.total ||
+                  Number(
+                    e.target.getResponseHeader("x-decompressed-content-length")
+                  );
+                m.redraw();
+              };
+            },
+          }).then(
+            (response) => {
+              state = "DONE";
+              onFinishDownload(response);
+            },
+            (e) => {
+              console.error(e);
+              state = "FAILED";
+              onFinishDownload(null);
+            }
+          );
+        };
+
+        const view = () => {
+          const fraction =
+            total == -1 ? `?MB/?MB` : `${formatMB(loaded)}/${formatMB(total)}`;
+          return m("span", [
+            `${fraction} [${state}] `,
+            m(
+              "span",
+              {
+                style: "cursor: pointer;",
+                onclick: () =>
+                  window.alert(
+                    "On some browsers, download size might look contradicted due to file compression."
+                  ),
+              },
+              "[?]"
+            ),
+          ]);
+        };
+
+        return { oninit, view };
+      };
+
+      const App = () => {
+        let yaneuraou = null;
+        let yaneuraou_state = "INIT"; // 'LOADING', 'BEFOREREADY', 'READY', 'FAILED'
+        let output = "";
+        let tail_mode = true;
+        let movetime = 3000;
+
+        // lazy updateing of log output
+        let lastOutputDraw = performance.now();
+        const outputDrawInterval = 60;
+        const outputRedraw = () => {
+          const tryRedraw = (aTime) => {
+            const cTime = performance.now();
+            if (aTime < lastOutputDraw) { return; }
+            if (cTime > lastOutputDraw + outputDrawInterval) {
+              lastOutputDraw = performance.now();
+              m.redraw();
+            } else {
+              setTimeout(tryRedraw, outputDrawInterval, aTime);
+            }
+          };
+          tryRedraw(performance.now());
+        };
+
+        const scrollOutput = () => {
+          if (!tail_mode) {
+            return;
+          }
+          $("#opre").scrollTo({
+            top: $("#opre").scrollHeight,
+            behavior: "smooth",
+          });
+        };
+
+        // Make error catchable
+        const loadYaneuraOu = async (params) => {
+          return window[evalTypeInfo().func](params);
+        };
+
+        const wCache = {};
+        const rCache = {};
+        const postCommand = (command) => {
+          output += `>> ${command}\n`;
+          yaneuraou.postMessage(command);
+          outputRedraw();
+        };
+        const postCommandWait = (command, waitResp, ...gatherResps) => {
+          wCache[waitResp] = true;
+          for (const gatherResp of gatherResps) {
+            rCache[gatherResp] = null;
+          }
+          postCommand(command);
+          return new Promise((resolve) => {
+            (function poll() {
+              if (wCache[waitResp]) {
+                setTimeout(poll, 1);
+              } else {
+                delete wCache[waitResp];
+                const res = {};
+                res[waitResp] = rCache[waitResp];
+                for (const gatherResp of gatherResps) {
+                  res[gatherResp] = rCache[gatherResp];
+                }
+                resolve(res);
+              }
+            })();
+          });
+        };
+        const sendCommand = () => {
+          const command = $("#command").value;
+          if (command.length > 0) {
+            postCommand(command);
+          }
+        };
+        let kifuStore = undefined;
+        const selfPlay = async () => {
+          if (yaneuraou_state != 'READY') {
+            return;
+          }
+
+          // delete log, leaving last 1000 lines
+          ((output_a) => {
+            if (output_a.length > 1000) {
+              output = output_a.slice(output_a.length - 1000).join("\n");
+              $("#opre").scrollTo({ top: 0, left: 0, behavior: 'instant' });
+              m.redraw(true);
+              setTimeout(() => {
+                $("#opre").scrollTo({ top: $("#opre").scrollHeight, behavior: 'instant' });
+              }, 60);
+            }
+          })(output.split("\n"));
+
+          let csa = `V2.2\nN+${evalTypeInfo().ident}\nN-${evalTypeInfo().ident}\nPI\n+\n`;
+
+          if (kifuStore) {
+            await kifuStore.loadKifu(csa);
+            kifuStore.player.goto(0);
+          } else {
+            kifuStore = await window.KifuForJS.loadString(csa, "board");
+          }
+
+          yaneuraou_state = 'SELFPLAY';
+          m.redraw();
+          const sfenList = [];
+          const sfenRepCountObj = {};
+          let thinkLoop = true;
+          while (thinkLoop) {
+            // setposition
+            const pos = `position startpos moves ${sfenList.join(' ')}`
+            postCommand(pos);
+            // get sfen
+            const res_d = await postCommandWait('d', 'sfen');
+            const sfen = `${res_d.sfen}`;
+            // trim tesuu
+            let ri = sfen.length;
+            while (sfen.codePointAt(ri - 1) == 32) { ri--; }
+            while (sfen.codePointAt(ri - 1) >= 48 && sfen.codePointAt(ri - 1) <= 57) { ri--; }
+            while (sfen.codePointAt(ri - 1) == 32) { ri--; }
+            const sfentr = sfen.substring(0, ri);
+            // csa board
+            const csa_board = (() => {
+              const b = Array.from({ length: 9 }, (i) => Array.from({ length: 9 }, (j) => ''));
+              let i = 5, x = 8, y = 0;
+              while (y < 9) {
+                switch (sfen[i]) {
+                  case 'K': b[x][y] = '+OU'; x -= 1; break;
+                  case 'R': b[x][y] = '+HI'; x -= 1; break;
+                  case 'B': b[x][y] = '+KA'; x -= 1; break;
+                  case 'G': b[x][y] = '+KI'; x -= 1; break;
+                  case 'S': b[x][y] = '+GI'; x -= 1; break;
+                  case 'N': b[x][y] = '+KE'; x -= 1; break;
+                  case 'L': b[x][y] = '+KY'; x -= 1; break;
+                  case 'P': b[x][y] = '+FU'; x -= 1; break;
+                  case 'k': b[x][y] = '-OU'; x -= 1; break;
+                  case 'r': b[x][y] = '-HI'; x -= 1; break;
+                  case 'b': b[x][y] = '-KA'; x -= 1; break;
+                  case 'g': b[x][y] = '-KI'; x -= 1; break;
+                  case 's': b[x][y] = '-GI'; x -= 1; break;
+                  case 'n': b[x][y] = '-KE'; x -= 1; break;
+                  case 'l': b[x][y] = '-KY'; x -= 1; break;
+                  case 'p': b[x][y] = '-FU'; x -= 1; break;
+                  case '+':
+                    switch(sfen[i + 1]) {
+                      case 'R': b[x][y] = '+RY'; x -= 1; break;
+                      case 'B': b[x][y] = '+UM'; x -= 1; break;
+                      case 'S': b[x][y] = '+NG'; x -= 1; break;
+                      case 'N': b[x][y] = '+NK'; x -= 1; break;
+                      case 'L': b[x][y] = '+NY'; x -= 1; break;
+                      case 'P': b[x][y] = '+TO'; x -= 1; break;
+                      case 'r': b[x][y] = '-RY'; x -= 1; break;
+                      case 'b': b[x][y] = '-UM'; x -= 1; break;
+                      case 's': b[x][y] = '-NG'; x -= 1; break;
+                      case 'n': b[x][y] = '-NK'; x -= 1; break;
+                      case 'l': b[x][y] = '-NY'; x -= 1; break;
+                      case 'p': b[x][y] = '-TO'; x -= 1; break;
+                      default: return undefined;
+                    }
+                    i += 1;
+                    break;
+                  case '1': x -= 1; break;
+                  case '2': x -= 2; break;
+                  case '3': x -= 3; break;
+                  case '4': x -= 4; break;
+                  case '5': x -= 5; break;
+                  case '6': x -= 6; break;
+                  case '7': x -= 7; break;
+                  case '8': x -= 8; break;
+                  case '9': x -= 9; break;
+                  case '/': y += 1; x = 8; break;
+                  case ' ': return b;
+                  default: return undefined;
+                }
+                i += 1;
+              }
+              return undefined;
+            })();
+            if (!csa_board) {
+              output += `# info : sfen parse board failed. break.\n`;
+              break;
+            }
+            // csa side
+            const csa_side = (() => {
+              switch(sfen.split(' ')[2]) {
+                case 'b': return '+';
+                case 'w': return '-';
+                default: return undefined;
+              }
+            })();
+            if (!csa_side) {
+              output += `# info : sfen parse side failed. break.\n`;
+              break;
+            }
+            // sennichite check
+            // Attention: This code does not determine if it is a continuous check sennichite.
+            sfenRepCountObj[sfentr] = (sfenRepCountObj[sfentr]|0) + 1;
+            if (sfenRepCountObj[sfentr] >= 2) {
+              output += `# info : position repetition ${sfenRepCountObj[sfentr]} times\n`;
+              outputRedraw();
+              csa += `'# info : position repetition ${sfenRepCountObj[sfentr]} times\n`;
+              await kifuStore.loadKifu(csa);
+              kifuStore.player.goto(Infinity);
+            }
+            if (sfenRepCountObj[sfentr] >= 4) {
+              postCommand('gameover draw');
+              csa += `%SENNICHITE\n`;
+              await kifuStore.loadKifu(csa);
+              kifuStore.player.goto(Infinity);
+              break;
+            }
+            // go think
+            const res_go = await postCommandWait(`go movetime ${movetime}`, 'bestmove', 'info');
+            const bestmove = `${res_go.bestmove}`.split(' ')[1];
+            sfenList.push(bestmove);
+            // check resign
+            if (bestmove == 'resign') {
+              postCommand('gameover lose');
+              csa += `%TORYO\n`;
+              if (res_go.info) { csa += `'${res_go.info}\n`; }
+              csa += `'${res_go.bestmove}\n`;
+              await kifuStore.loadKifu(csa);
+              kifuStore.player.goto(Infinity);
+              break;
+            }
+            // check win
+            if (bestmove == 'win') {
+              postCommand('gameover win');
+              csa += `%KACHI\n`;
+              if (res_go.info) { csa += `'${res_go.info}\n`; }
+              csa += `'${res_go.bestmove}\n`;
+              await kifuStore.loadKifu(csa);
+              kifuStore.player.goto(Infinity);
+              break;
+            }
+            // csa move
+            if (bestmove.match(/^[1-9][a-i][1-9][a-i]\+?$/)) {
+              const fromx = bestmove.codePointAt(0) - 48;
+              const fromy = bestmove.codePointAt(1) - 96;
+              const tox = bestmove.codePointAt(2) - 48;
+              const toy = bestmove.codePointAt(3) - 96;
+              const toptype = (bestmove[4] == '+') ? {
+                '+HI': '+RY',
+                '+KA': '+UM',
+                '+GI': '+NG',
+                '+KE': '+NK',
+                '+KY': '+NY',
+                '+FU': '+TO',
+                '-HI': '-RY',
+                '-KA': '-UM',
+                '-GI': '-NG',
+                '-KE': '-NK',
+                '-KY': '-NY',
+                '-FU': '-TO',
+              }[csa_board[fromx - 1][fromy - 1]] : csa_board[fromx - 1][fromy - 1];
+              if (!toptype) {
+                output += `# info : piecetype fetch failed. break.\n`;
+                break;
+              }
+              if (csa_side != toptype[0]) {
+                output += `# info : piece side differ. break.\n`;
+                break;
+              }
+              csa += `${csa_side}${fromx}${fromy}${tox}${toy}${toptype.substring(1)}\n`;
+            } else if (bestmove.match(/^[RBGSNLP]\*[1-9][a-i]\+?$/)) {
+              const ptype = {
+                  "R": "HI",
+                  "B": "KA",
+                  "G": "KI",
+                  "S": "GI",
+                  "N": "KE",
+                  "L": "KY",
+                  "P": "FU",
+                }[bestmove[0]];
+              const tox = bestmove.codePointAt(2) - 48;
+              const toy = bestmove.codePointAt(3) - 96;
+              csa += `${csa_side}00${tox}${toy}${ptype}\n`;
+            } else {
+              output += `# info : bestmove parse failed. break.\n`;
+              break;
+            }
+            if (res_go.info) { csa += `'${res_go.info}\n`; }
+            csa += `'${res_go.bestmove}\n`;
+            await kifuStore.loadKifu(csa);
+            kifuStore.player.goto(Infinity);
+          }
+          outputRedraw();
+          await postCommandWait('isready', 'readyok');
+          yaneuraou_state = 'READY';
+          m.redraw();
+        }
+
+        const onFinishDownload = (data) => {
+          if (!data) {
+            yaneuraou_state = "FAILED";
+            m.redraw();
+            return;
+          }
+
+          loadYaneuraOu({ wasmBinary: data })
+            .then((_yaneuraou) => {
+              yaneuraou = _yaneuraou;
+              (async () => {
+                yaneuraou.addMessageListener((line) => {
+                  output += line + "\n";
+                  Object.keys(rCache)
+                    .filter((v) => `${line}`.startsWith(v))
+                    .forEach((v) => { rCache[v] = line; })
+                  Object.keys(wCache)
+                    .filter((v) => `${line}`.startsWith(v))
+                    .forEach((v) => { rCache[v] = line; wCache[v] = false; });
+                  outputRedraw();
+                });
+                postCommand('compiler');
+                await postCommandWait('usi', 'usiok');
+                postCommand(`setoption name USI_Hash value ${Math.min(Math.max(queries['USI_Hash']||0, 16), 2048)}`);
+                postCommand('setoption name PvInterval value 0');
+                postCommand(`setoption name Threads value ${Math.min(hardwareConcurrency, 32)}`);
+                await postCommandWait('isready', 'readyok');
+                yaneuraou_state = "READY";
+                m.redraw();
+                kifuStore = await window.KifuForJS.loadString(`V2.2\nN+${evalTypeInfo().ident}\nN-${evalTypeInfo().ident}\nPI\n+\n`, "board");
+              })();
+            })
+            .catch((e) => {
+              yaneuraou_state = "FAILED";
+              output += "---error\n" + e + "\n";
+              throw e;
+            })
+            .finally(() => m.redraw());
+        };
+
+        const oninit = () => {
+          yaneuraou_state = "LOADING";
+        };
+
+        const view = () => {
+          const is_ready = yaneuraou_state == "READY";
+
+          return m("main", [
+            m("div#mode", [
+              m(
+                "select#evaltype",
+                {
+                  selectedIndex: evalTypeInfo().idx,
+                  onchange: (e) => {
+                    if (is_ready) {
+                      yaneuraou.terminate();
+                    }
+                    location.replace(`?${[
+                      { name: "EvalType", value: `${e.target.value}` },
+                      { name: "USI_Hash", value: `${queries['USI_Hash']|0||16}` },
+                    ]
+                    .filter((e) => e.value)
+                    .map((e) => `${e.name}=${e.value}`)
+                    .join(";")
+                    }`);
+                  }
+                },
+                infoList.map((v) => m("option", { value: v.ident }, v.labal)),
+              ),
+              m(
+                "select#usihash",
+                {
+                  selectedIndex: {
+                    '16': 0,
+                    '32': 1,
+                    '64': 2,
+                    '128': 3,
+                    '256': 4,
+                    '512': 5,
+                    '1024': 6,
+                    '1280': 7,
+                    '1536': 8,
+                    '1792': 9,
+                    '2048': 10,
+                  }[`${queries['USI_Hash']}`.toLowerCase()]|0,
+                  onchange: (e) => {
+                    if (is_ready) {
+                      yaneuraou.terminate();
+                    }
+                    location.replace(`?${[
+                      { name: "EvalType", value: `${queries['EvalType']||''}` },
+                      { name: "USI_Hash", value: `${e.target.value}` },
+                    ]
+                    .filter((e) => e.value)
+                    .map((e) => `${e.name}=${e.value}`)
+                    .join(";")
+                    }`);
+                  }
+                },
+                [
+                  m("option", { value: 16 }, "USI_Hash=16"),
+                  m("option", { value: 32 }, "USI_Hash=32"),
+                  m("option", { value: 64 }, "USI_Hash=64"),
+                  m("option", { value: 128 }, "USI_Hash=128"),
+                  m("option", { value: 256 }, "USI_Hash=256"),
+                  m("option", { value: 512 }, "USI_Hash=512"),
+                  m("option", { value: 1024 }, "USI_Hash=1024"),
+                  m("option", { value: 1280 }, "USI_Hash=1280"),
+                  m("option", { value: 1536 }, "USI_Hash=1536"),
+                  m("option", { value: 1792 }, "USI_Hash=1792"),
+                  m("option", { value: 2048 }, "USI_Hash=2048"),
+                ]
+              ),
+              m(
+                "select#movetime",
+                {
+                  onchange: (e) => {
+                    movetime = e.target.value;
+                  }
+                },
+                [
+                  m("option", { value: 100, selected: movetime == 100 }, "0.1s"),
+                  m("option", { value: 200, selected: movetime == 200 }, "0.2s"),
+                  m("option", { value: 300, selected: movetime == 300 }, "0.3s"),
+                  m("option", { value: 500, selected: movetime == 500 }, "0.5s"),
+                  m("option", { value: 700, selected: movetime == 700 }, "0.7s"),
+                  m("option", { value: 1000, selected: movetime == 1000 }, "1s"),
+                  m("option", { value: 2000, selected: movetime == 2000 }, "2s"),
+                  m("option", { value: 3000, selected: movetime == 3000 }, "3s"),
+                  m("option", { value: 5000, selected: movetime == 5000 }, "5s"),
+                  m("option", { value: 7000, selected: movetime == 7000 }, "7s"),
+                  m("option", { value: 10000, selected: movetime == 10000 }, "10s"),
+                  m("option", { value: 15000, selected: movetime == 15000 }, "15s"),
+                  m("option", { value: 20000, selected: movetime == 20000 }, "20s"),
+                  m("option", { value: 30000, selected: movetime == 30000 }, "30s"),
+                  m("option", { value: 40000, selected: movetime == 40000 }, "40s"),
+                  m("option", { value: 50000, selected: movetime == 50000 }, "50s"),
+                  m("option", { value: 60000, selected: movetime == 60000 }, "60s"),
+                ]
+              ),
+              m(
+                "button#selfplay",
+                { disabled: (!is_ready || yaneuraou_state != "READY"), onclick: selfPlay },
+                "SelfPlay"
+              ),
+              "Note: This demo (started by pressing `SelfPlay`) will use a long time CPU, up to 32 threads.",
+            ]),
+            m("div#misc", [
+              m("div", [
+                "- Download: ",
+                m(RequestProgress, {
+                  url: evalTypeInfo().wasm,
+                  onFinishDownload,
+                }),
+              ]),
+              m("div", [
+                m("div", `- YaneuraOu state: ${yaneuraou_state}`),
+                m("span", { style: "margin-right: 5px;" }, "- Tail mode:"),
+                m(
+                  "span",
+                  {
+                    style: "cursor: pointer;",
+                    onclick: () => {
+                      tail_mode = !tail_mode;
+                      scrollOutput();
+                    },
+                  },
+                  [tail_mode ? "[x]" : "[ ]"]
+                ),
+              ]),
+            ]),
+            m("div#output", { onupdate: scrollOutput }, m("div#oig", [
+              m("div#board"), m("pre#opre", output),
+            ])),
+            m("div#footer", [
+              "WebAssembly fork WIP source: ",
+              m("a", { href: "https://github.com/mizar/YaneuraOu.wasm/tree/wasm/" }, "https://github.com/mizar/YaneuraOu.wasm/tree/wasm/"),
+              ".",
+            ]),
+          ]);
+        };
+
+        return { oninit, view };
+      };
+
+      if (isSupported() !== true) {
+        window.alert(
+          "Your browser is not supported. {{ crossOriginIsolated: " + String(crossOriginIsolated) + " }} {{ " + String(isSupported()) + " }} For more information, please take a look at https://github.com/yaneurao/YaneuraOu/."
+        );
+      } else {
+        const scr = document.createElement('script');
+        scr.type = 'text/javascript';
+        scr.src = evalTypeInfo().js;
+        const s = document.getElementsByTagName('script')[0];
+        scr.onload = (_e) => {
+          m.mount($("#root"), App);
+        };
+        s.parentNode.insertBefore(scr, s);
+      }
+    })();
+  </script>
+</body>
