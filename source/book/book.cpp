@@ -646,7 +646,11 @@ namespace Book
 				};
 
 				// バイナリサーチ
-				// [s,e) の範囲で求める。
+				//
+				// 区間 [s,e) で解を求める。現時点での中間地点がm。
+				// 解とは、探しているsfen文字列が書いてある行の先頭のファイルポジションのことである。
+				//
+				// next_sfen()でm以降にある"sfen"で始まる行を読み込んだ時、そのあとのファイルポジションがlast_pos。
 
 				s64 s = 0, e = file_size, m;
 				// s,eは無符号型だと、s - 2のような式が負にならないことを保証するのが面倒くさい。
@@ -953,9 +957,19 @@ namespace Book
 			, "yaneura_book1.db" , "yaneura_book2.db" , "yaneura_book3.db", "yaneura_book4.db"
 			, "user_book1.db", "user_book2.db", "user_book3.db", "book.bin" };
 
+#if !defined(__EMSCRIPTEN__)
 		o["BookFile"] << Option(book_list, book_list[1]);
+#else
+		// WASM では no_book をデフォルトにする
+		o["BookFile"] << Option(book_list, book_list[0]);
+#endif
 
+#if !defined(__EMSCRIPTEN__)
 		o["BookDir"] << Option("book");
+#else
+		// WASM
+		o["BookDir"] << Option(".");
+#endif
 
 		//  BookEvalDiff: 定跡の指し手で1番目の候補の指し手と、2番目以降の候補の指し手との評価値の差が、
 		//    この範囲内であれば採用する。(1番目の候補の指し手しか選ばれて欲しくないときは0を指定する)
@@ -1056,6 +1070,36 @@ namespace Book
 		// 定跡にhitしたときに発生するオーバーヘッドなので通常は無視できるはず。
 
 		auto move_list = *it;
+
+		// 非合法手の排除(歩の不成を生成しないモードなら、それも排除)
+		{
+			auto it_end = std::remove_if(move_list.begin(), move_list.end(), [&](Book::BookMove& m) {
+				Move move = rootPos.to_move(m.move);
+				bool legal =  rootPos.pseudo_legal_s<true>(move) && rootPos.legal(move);
+
+				// moveが非合法手ならば、エラーメッセージを出力しておいてやる。
+				if (!silent && !legal)
+				{
+					sync_cout << "info string Error! : Illegal Move In Book DB : move = " << move
+							  << " , sfen = " << rootPos.sfen() << sync_endl;
+
+					// Position::legal()を用いて合法手判定をする時、これが連続王手の千日手を弾かないが、
+					// 定跡で連続王手の千日手の指し手があると指してしまう。
+					// これは回避が難しいので、仕様であるものとする。
+					//
+					// "position"コマンドでも千日手局面は弾かないし、この仕様は仕方ない意味はある。
+				}
+				else {
+					// GenerateAllLegalMovesがfalseの時は歩の不成での移動は非合法手扱いで、この時点で除去してこのあとの抽選を行う。
+					// 不成の指し手が選択されて、このあとrootMovesに登録されていないので定跡にhitしなかった扱いになってしまうのはもったいない。
+					legal &= rootPos.pseudo_legal(move);
+				}
+
+				// 非合法手の排除
+				return !legal;
+				});
+			move_list.erase(it_end, move_list.end());
+		}
 
 		// 出現回数のトータル(このあと出現頻度を求めるのに使う)
 		u64 move_count_total = std::accumulate(move_list.begin(), move_list.end(), (u64)0, [](u64 acc, BookMove& b) { return acc + b.move_count; });

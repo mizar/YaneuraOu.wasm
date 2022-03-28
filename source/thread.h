@@ -113,10 +113,18 @@ public:
 
 	// rootDepth      : 反復深化の深さ
 	//					Lazy SMPなのでスレッドごとにこの変数を保有している。
-	// 
+	//
 	// completedDepth : このスレッドに関して、終了した反復深化の深さ
 	//
 	Depth rootDepth, completedDepth;
+
+#if defined(__EMSCRIPTEN__)
+	// yaneuraou.wasm
+	std::atomic_bool threadStarted;
+#endif
+
+	// aspiration searchのrootでの beta - alpha
+	Value rootDelta;
 
 #if defined(USE_MOVE_PICKER)
 	// 近代的なMovePickerではオーダリングのために、スレッドごとにhistoryとcounter movesなどのtableを持たないといけない。
@@ -153,7 +161,7 @@ public:
 #endif
 
 };
-  
+
 
 // 探索時のmainスレッド(これがmasterであり、これ以外はslaveとみなす)
 struct MainThread: public Thread
@@ -265,7 +273,7 @@ struct ThreadPool: public std::vector<Thread*>
 	// main thread以外の探索スレッドがすべて終了しているか。
 	// すべて終了していればtrueが返る。
 	bool search_finished() const;
-	
+
 private:
 
 	// 現局面までのStateInfoのlist
