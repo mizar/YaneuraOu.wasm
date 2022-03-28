@@ -47,15 +47,18 @@ YANEURAOU_EDITION = YANEURAOU_ENGINE_NNUE
 #TARGET_CPU = AVX512VNNI
 #TARGET_CPU = AVX512
 TARGET_CPU = AVX2
-#TARGET_CPU = GRAVITON2
 #TARGET_CPU = SSE42
 #TARGET_CPU = SSE41
 #TARGET_CPU = SSSE3
 #TARGET_CPU = SSE2
 #TARGET_CPU = NO_SSE
-#TARGET_CPU = OTHER
 #TARGET_CPU = ZEN1
 #TARGET_CPU = ZEN2
+#TARGET_CPU = ZEN3
+# -- ARMとか
+#TARGET_CPU = OTHER
+#TARGET_CPU = GRAVITON2
+#TARGET_CPU = WASM
 
 
 # デバッガーを使用するか (debugger)
@@ -67,6 +70,7 @@ DEBUG = OFF
 # ※ clangでコンパイルしたほうがgccより数%速いっぽい。
 #COMPILER = g++
 COMPILER = clang++
+#COMPILER = em++
 
 
 # エンジンの表示名 (engine displayname)
@@ -81,7 +85,7 @@ COMPILER = clang++
 
 
 # 標準的なコンパイルオプション (standard compile options)
-CPPFLAGS   = -std=c++17 -fno-exceptions -fno-rtti -Wunused-variable -Wextra -Ofast -MMD -MP -fpermissive
+CPPFLAGS   = -std=c++17 -fno-exceptions -fno-rtti -Wunused-variable -Wextra -MMD -MP -fpermissive
 WCPPFLAGS  =
 LDFLAGS  = $(EXTRA_LDFLAGS)
 LIBS     =
@@ -109,6 +113,13 @@ MATERIAL_LEVEL = 1
 #
 # ※ ifeq (A,B) は「AとBが等しいならば、以下を実行してください。」という意味。紛らわしいので気をつけよう。
 
+
+# em++ では -Ofast の指定は対応していない
+ifneq (,$(findstring em++,$(COMPILER)))
+	CPPFLAGS += -O3
+else
+	CPPFLAGS += -Ofast
+endif
 
 # デバッガーを使わないなら、NDEBUGをdefineする。
 ifeq ($(DEBUG),OFF)
@@ -143,18 +154,42 @@ else
 
 		# C++17のfilesystem
 		# LDFLAGS += -lstdc++fs
-
+	endif
+	ifneq (,$(findstring em++,$(COMPILER)))
+		EM_EXPORT_NAME=YaneuraOu
+		EM_INITIAL_MEMORY_SIZE=$(shell if [ $(MATERIAL_LEVEL) -ge 5 ]; then echo 385875968; else echo 138412032; fi)
+		CPPFLAGS += -Wno-unused-parameter
+		CPPFLAGS += -DUSE_WASM_SIMD -msimd128
+		# CPPFLAGS += -DUSE_SSE42 -msse4.2
+		CPPFLAGS += -march=wasm32
+		# CPPFLAGS += -march=corei7
+		CPPFLAGS += -s USE_PTHREADS=1
+		CPPFLAGS += -s STRICT=1
+		LDFLAGS += --pre-js wasm_pre.js
+		# LDFLAGS += --preload-file eval/nn.bin
+		LDFLAGS += -s MODULARIZE=1 -s EXPORT_NAME="$(EM_EXPORT_NAME)" -s ENVIRONMENT=web,worker,node
+		# LDFLAGS += -s PTHREAD_POOL_SIZE=32
+		LDFLAGS += -s FILESYSTEM=1 -s EXIT_RUNTIME=0 -s "EXPORTED_RUNTIME_METHODS=['FS','ccall']"
+		LDFLAGS += -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=$(EM_INITIAL_MEMORY_SIZE) -s MAXIMUM_MEMORY=4294967296
+		LDFLAGS += -s TOTAL_STACK=67108864
+		LDFLAGS += -s LLD_REPORT_UNDEFINED
+		# LDFLAGS += -s ALLOW_UNIMPLEMENTED_SYSCALLS
+		LDFLAGS += -s --closure 1
 	endif
 endif
 
 TARGETDIR = .
-ifeq ($(OS),Windows_NT)
-	CPPFLAGS += $(WCPPFLAGS)
-	LDFLAGS += -static -Wl,--stack,25000000
-	TARGET = $(TARGETDIR)/KomoringHeights-by-gcc.exe
+ifneq (,$(findstring em++,$(COMPILER)))
+	TARGET = $(TARGETDIR)/komoringheights.js
 else
-	CPPFLAGS += -D_LINUX
-	TARGET = $(TARGETDIR)/KomoringHeights-by-gcc
+	ifeq ($(OS),Windows_NT)
+		CPPFLAGS += $(WCPPFLAGS)
+		LDFLAGS += -static -Wl,--stack,25000000
+		TARGET = $(TARGETDIR)/KomoringHeights-by-gcc.exe
+	else
+		CPPFLAGS += -D_LINUX
+		TARGET = $(TARGETDIR)/KomoringHeights-by-gcc
+	endif
 endif
 
 # リンク時最適化。
@@ -162,11 +197,21 @@ endif
 # cf. https://gcc.gnu.org/onlinedocs/gcc-6.3.0/gcc/Optimize-Options.html#Optimize-Options
 LTOFLAGS = -flto
 
+# MSYS2 clang++ で -flto 指定時にリンクを行えない問題の回避
+ifneq (,$(findstring clang++,$(COMPILER)))
+	ifeq ($(OS),Windows_NT)
+		LDFLAGS += -fuse-ld=lld
+	endif
+endif
+
 # wstringを使うためにこのシンボル定義が必要。
 CPPFLAGS  += -DUNICODE
 
+# em++ では strip: -Wl,-s の指定はしない
+ifeq (,$(findstring em++,$(COMPILER)))
 # stripの指示。(実行ファイルのサイズを小さく)
 LDFLAGS += -Wl,-s
+endif
 
 # mingw64では-D_WIN64,-D_WIN32は環境に応じて自動で設定されるので指定すべきではない。
 # CPPFLAGS += -D_WIN64
@@ -480,9 +525,13 @@ else ifeq ($(TARGET_CPU),GRAVITON2)
 	# for Amazon Web Servece EC2, the Graviton2 CPU [M6g/M6gd, C6g/C6gd/C6gn, R6g/R6gd, T4g, X2gd] instances
 	# https://github.com/aws/aws-graviton-getting-started/blob/main/c-c++.md
 	CPPFLAGS += -DIS_64BIT -DUSE_NEON -march=armv8.2-a+fp16+rcpc+dotprod+crypto
-else ifeq ($(TARGET_CPU),M1)
-	# for Apple M1
-	CPPFLAGS += -DIS_64BIT -DUSE_NEON -march=armv8.5-a+fp16+rcpc+dotprod+crypto -mcpu=apple-m1
+else ifeq ($(TARGET_CPU),APPLEAVX2)
+	CPPFLAGS += -DIS_64BIT -DUSE_AVX2 -DUSE_BMI2 -target x86_64-apple-macos11 -mbmi -mbmi2 -mavx2 -mpopcnt
+else ifeq ($(TARGET_CPU),APPLESSE42)
+	CPPFLAGS += -DIS_64BIT -DUSE_SSE42 -target x86_64-apple-macos11
+else ifeq ($(TARGET_CPU),APPLEM1)
+	CPPFLAGS += -DIS_64BIT -DUSE_NEON -target arm64-apple-macos11
+else ifeq ($(TARGET_CPU),WASM)
 
 else ifeq ($(TARGET_CPU),OTHER)
 	CPPFLAGS += -DNO_SSE
@@ -512,30 +561,30 @@ $(OBJDIR)/%.o: %.cpp
 
 # 通常使用。
 normal:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS)' LDFLAGS='$(LDFLAGS) $(LTOFLAGS)' $(TARGET)
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS)' LDFLAGS='$(LDFLAGS) $(LTOFLAGS)' $(TARGET)
 
 # 学習用。openmp , openblasなどを有効にする。
 evallearn:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(OPENMP) $(BLAS) -DEVAL_LEARN' LDFLAGS='$(LDFLAGS) $(OPENMP_LDFLAGS) $(BLAS_LDFLAGS) $(LTOFLAGS)' $(TARGET)
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) $(OPENMP) $(BLAS) -DEVAL_LEARN' LDFLAGS='$(LDFLAGS) $(OPENMP_LDFLAGS) $(BLAS_LDFLAGS) $(LTOFLAGS)' $(TARGET)
 
 # トーナメント用
 tournament:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS) -DFOR_TOURNAMENT' LDFLAGS='$(LDFLAGS) $(LTOFLAGS)' $(TARGET)
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) -DFOR_TOURNAMENT' LDFLAGS='$(LDFLAGS) $(LTOFLAGS)' $(TARGET)
 
 # 教師棋譜生成用(開発用なので非公開) // currently private
 gensfen:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(OPENMP) $(BLAS) -DEVAL_LEARN -DGENSFEN2019' LDFLAGS='$(LDFLAGS) $(OPENMP_LDFLAGS) $(BLAS_LDFLAGS) $(LTOFLAGS)' $(TARGET)
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) $(OPENMP) $(BLAS) -DEVAL_LEARN -DGENSFEN2019' LDFLAGS='$(LDFLAGS) $(OPENMP_LDFLAGS) $(BLAS_LDFLAGS) $(LTOFLAGS)' $(TARGET)
 
 
 #　とりあえずPGOはAVX2とSSE4.2専用
 prof:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS) -pg' tournament
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) -pg' tournament
 
 profgen:
 	$(MAKE) CPPFLAGS='$(CPPFLAGS) -fprofile-generate -lgcov' LDFLAGS='$(LDFLAGS) -fprofile-generate -lgcov'
 
 profuse:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS) -fprofile-use -lgcov' LDFLAGS='$(LDFLAGS) -fprofile-use -lgcov $(LTOFLAGS)'
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) -fprofile-use -lgcov' LDFLAGS='$(LDFLAGS) -fprofile-use -lgcov $(LTOFLAGS)'
 
 pgo:
 	$(MAKE) profgen
@@ -544,6 +593,7 @@ pgo:
 	$(MAKE) profuse
 
 clean:
-	rm -rf $(OBJECTS) $(DEPENDS) $(TARGET) ${OBJECTS:.o=.gcda} ${OBJDIR}
+	rm -rf ${OBJDIR}
+	rm -rf $(OBJECTS) $(DEPENDS) $(TARGET) ${OBJECTS:.o=.gcda}
 
 -include $(DEPENDS)
