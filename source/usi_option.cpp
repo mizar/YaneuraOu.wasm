@@ -28,8 +28,15 @@ namespace USI {
 	// optionのdefault値を設定する。
 	void init(OptionsMap& o)
 	{
+#if !defined(__EMSCRIPTEN__)
 		// Hash上限。32bitモードなら2GB、64bitモードなら33TB
 		constexpr int MaxHashMB = Is64Bit ? 33554432 : 2048;
+#else
+		// yaneuraou.wasm
+		// メモリの調整
+		// stockfish.wasmの数値を基本的に使用している
+		constexpr int MaxHashMB = 2048;
+#endif
 
 		// 並列探索するときのスレッド数
 		// CPUの搭載コア数をデフォルトとすべきかも知れないが余計なお世話のような気もするのでしていない。
@@ -45,8 +52,13 @@ namespace USI {
 
 #if defined(USER_ENGINE)
 		o["Threads"] << Option(1, 1, 512, [](const Option& o) { /* Threads.set(o); */ });
-#else
+#elif !defined(__EMSCRIPTEN__)
 		o["Threads"] << Option(4, 1, 512, [](const Option& o) { /* Threads.set(o); */ });
+#else
+		// yaneuraou.wasm
+		// スレッド数などの調整
+		// stockfish.wasmの数値を基本的に使用している
+		o["Threads"] << Option(1, 1, 32, [](const Option& o) { /* Threads.set(o); */ });
 #endif
 #endif
 
@@ -128,7 +140,7 @@ namespace USI {
 #else
 
 		// TANUKI_MATE_ENGINEのとき
-		o["USI_Hash"] << Option(4096, 1, MaxHashMB);
+		o["USI_Hash"] << Option(std::min(4096, MaxHashMB), 1, MaxHashMB);
 
 #endif // !defined(TANUKI_MATE_ENGINE) && !defined(YANEURAOU_MATE_ENGINE) && !defined(USER_ENGINE)
 
