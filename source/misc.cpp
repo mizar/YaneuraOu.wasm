@@ -348,20 +348,16 @@ namespace {
 
 void* aligned_ttmem_alloc(size_t allocSize, void*& mem , size_t align /* ignore */ ) {
 
-	constexpr size_t alignment = 2 * 1024 * 1024; // assumed 2MB page sizes
-	size_t size = ((allocSize + alignment - 1) / alignment) * alignment; // multiple of alignment
-	if (posix_memalign(&mem, alignment, size))
-		mem = nullptr;
-	madvise(mem, allocSize, MADV_HUGEPAGE);
-
-	// Linux環境で、Hash TableのためにLarge Pageを確保したことを出力する。
-	if (largeMemoryAllocFirstCall)
-	{
-		sync_cout << "info string Hash table allocation: Linux Large Pages used." << sync_endl;
-		largeMemoryAllocFirstCall = false;
-	}
-
-	return mem;
+#if defined(POSIXALIGNEDALLOC)
+	void* mem;
+	return posix_memalign(&mem, alignment, size) ? nullptr : mem;
+#elif defined(_WIN32)
+	return _mm_malloc(size, alignment);
+#elif defined(__EMSCRIPTEN__)
+	return aligned_alloc(alignment, size);
+#else
+	return std::aligned_alloc(alignment, size);
+#endif
 }
 
 #elif defined(_WIN64)
