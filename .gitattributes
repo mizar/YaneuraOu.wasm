@@ -61,3 +61,13 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+*.sh text eof=lf
+*.js text eof=lf
+*.ts text eof=lf
+*.bat text eof=crlf
+*.cmd text eof=crlf
+*.ps1 text eof=crlf
+*.gz -text binary
+*.br -text binary
+*.wasm -text binary
