@@ -32,10 +32,13 @@ for(const pkgobj of pkglist) {
   const builddirusi = `build/wasm/${pkgobj.name}/`;
   const builddirlib = `build/wasm/${pkgobj.name}/lib/`;
   const usijs_copy_dirs = [
+    `npmpackages/yaneuraou.${pkgobj.name}/`,
   ];
   const dts_copy_dirs = [
+    `npmpackages/yaneuraou.${pkgobj.name}/lib/`,
   ];
   const lib_copy_dirs = [
+    `npmpackages/yaneuraou.${pkgobj.name}/lib/`,
   ];
   // embedded_nnue
   switch(pkgobj.name) {
