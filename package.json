@@ -1,0 +1,41 @@
+{
+  "private": true,
+  "name": "@mizarjp/yaneuraou",
+  "description": "YaneuraOu is the World's Strongest Shogi engine(AI player) , WCSC29 1st winner , educational and USI compliant engine.",
+  "keywords": [
+    "shogi",
+    "emscripten",
+    "webassembly"
+  ],
+  "license": "GPL-3.0",
+  "repository": "github:mizar/YaneuraOu.wasm",
+  "homepage": "https://github.com/yaneurao/YaneuraOu.wasm/",
+  "scripts": {
+    "versionup": "lerna version --force-publish=@mizarjp/yaneuraou.*",
+    "versionup:prepatch": "lerna version prepatch --force-publish=@mizarjp/yaneuraou.*",
+    "versionup:prerelease": "lerna version prerelease --force-publish=@mizarjp/yaneuraou.*",
+    "publish": "lerna publish --force-publish=@mizarjp/yaneuraou.*",
+    "publish:prepatch": "lerna publish prepatch --force-publish=@mizarjp/yaneuraou.*",
+    "publish:prerelease": "lerna publish prerelease --force-publish=@mizarjp/yaneuraou.*",
+    "publish:git": "lerna publish from-git --force-publish=@mizarjp/yaneuraou.*",
+    "publish:package": "lerna publish from-package --force-publish=@mizarjp/yaneuraou.*",
+    "serve": "node script/express.js",
+    "build": "node script/wasm_build.js",
+    "prepublish": "node script/wasm_docker_build.js",
+    "komoringheights-mate": "node script/wasm_docker_build.js komoringheights-mate"
+  },
+  "workspaces": {
+    "packages": [
+      "npmpackages/*"
+    ]
+  },
+  "devDependencies": {
+    "@types/emscripten": "^1.39.6",
+    "@types/node": "^17.0.28",
+    "express": "^4.18.0",
+    "express-static-gzip": "^2.1.5",
+    "lerna": "^4.0.0",
+    "ts-node": "^10.7.0",
+    "typescript": "^4.6.3"
+  }
+}
