@@ -1,5 +1,5 @@
 # for Mac environment
-name: Make CI (for Mac)
+name: Make CI (for MacOS)
 
 on:
   push:
@@ -10,23 +10,23 @@ on:
       - "**"
 
 jobs:
-  build-ubuntu:
-    # ubuntu-latest = ubuntu-18.04 => ubuntu-20.04
-    # https://github.com/actions/virtual-environments/issues/1816
-    # https://docs.github.com/ja/free-pro-team@latest/actions/reference/specifications-for-github-hosted-runners
+  build-macos:
+    # macos-11
+    # https://docs.github.com/ja/actions/using-github-hosted-runners/about-github-hosted-runners
+    # https://github.com/actions/virtual-environments/blob/main/images/macos/macos-11-Readme.md
     runs-on: macos-11
 
     strategy:
       matrix:
         edition:
           - USER_ENGINE
-        compiler: [clang++-12, clang++-11]
-        target: ["tournament"]
+        compiler:
+          - clang++-11
+          - clang++-12
+        target:
+          - tournament
         archcpu:
-          [
-            "AVX512,AVX2,SSE42,SSE2",
-            "SSE41,SSSE3,OTHER",
-          ]
+          - "APPLEAVX2,APPLESSE42,APPLEM1"
 
     steps:
       - name: Checkout own repository
