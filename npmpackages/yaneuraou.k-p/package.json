@@ -1,6 +1,6 @@
 {
   "name": "@mizarjp/yaneuraou.k-p",
-  "version": "7.1.0-alpha.2",
+  "version": "7.1.0-alpha.3",
   "description": "YaneuraOu shogi engine (NNUE K-P)",
   "keywords": [
     "shogi",
