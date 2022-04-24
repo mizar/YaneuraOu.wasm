@@ -4,5 +4,5 @@
     "npmpackages/*"
   ],
   "useWorkspaces": true,
-  "version": "0.5.0-kh.4"
+  "version": "0.5.0-kh.5"
 }
