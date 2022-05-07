@@ -621,7 +621,7 @@ evallearn:
 
 # トーナメント用
 tournament:
-	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) -DFOR_TOURNAMENT' LDFLAGS='$(LDFLAGS) $(LTOFLAGS)' $(TARGET)
+	$(MAKE) CPPFLAGS='$(CPPFLAGS) $(LTOFLAGS) -DFOR_TOURNAMENT -DHASH_KEY_BITS=128 -DTT_CLUSTER_SIZE=4' LDFLAGS='$(LDFLAGS) $(LTOFLAGS)' $(TARGET)
 
 # 教師棋譜生成用(開発用なので非公開) // currently private
 gensfen:
