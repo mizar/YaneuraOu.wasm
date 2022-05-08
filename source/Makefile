@@ -127,7 +127,7 @@ EVAL_EMBEDDING = OFF
 
 # em++ では -Ofast の指定は対応していない
 ifneq (,$(findstring em++,$(COMPILER)))
-	CPPFLAGS += -O2
+	CPPFLAGS += -O3
 else
 	CPPFLAGS += -Ofast
 endif
