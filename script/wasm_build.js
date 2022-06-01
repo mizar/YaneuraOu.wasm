@@ -149,8 +149,7 @@ async function runRepl(yaneuraou) {
 }
 
 async function main(argv) {
-  const wasmBinary = await fs.promises.readFile(path.join(__dirname, "./lib/yaneuraou.${pkgobj.name}.wasm"));
-  const yaneuraou = await YaneuraOu({ wasmBinary });
+  const yaneuraou = await YaneuraOu();
   const FS = yaneuraou.FS;
   if (USI_BOOK_FILE) {
     const buffer = await fs.promises.readFile(USI_BOOK_FILE);
@@ -204,8 +203,7 @@ async function runRepl(yaneuraou: YaneuraOuModule) {
 }
 
 async function main(argv: string[]) {
-  const wasmBinary = await fs.promises.readFile(path.join(__dirname, "./lib/yaneuraou.${pkgobj.name}.wasm"));
-  const yaneuraou: YaneuraOuModule = await YaneuraOu({ wasmBinary });
+  const yaneuraou: YaneuraOuModule = await YaneuraOu();
   const FS = yaneuraou.FS;
   if (USI_BOOK_FILE) {
     const buffer = await fs.promises.readFile(USI_BOOK_FILE);
