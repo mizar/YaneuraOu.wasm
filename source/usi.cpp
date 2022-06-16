@@ -262,7 +262,7 @@ namespace USI
 
 					// まず、rootMoves.pvを辿れるところまで辿る。
 					// rootMoves[i].pv[0]は宣言勝ちの指し手(MOVE_WIN)の可能性があるので注意。
-					if (ply < rootMoves[i].pv.size())
+					if (ply < 0 || (size_t)ply < rootMoves[i].pv.size())
 						m = rootMoves[i].pv[ply];
 					else
 					{
